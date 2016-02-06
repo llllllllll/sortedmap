@@ -16,6 +16,7 @@ private:
 
 public:
     OwnedRef<T>() {
+        ob = NULL;
     }
 
     OwnedRef<T>(T *ob) {
@@ -23,6 +24,13 @@ public:
             Py_INCREF(ob);
         }
         this->ob = ob;
+    }
+
+    OwnedRef<T>(const OwnedRef<T> &ref) {
+        ob = ref.ob;
+        if (likely(ob)) {
+            Py_INCREF(ob);
+        }
     }
 
     ~OwnedRef<T>() {
@@ -44,7 +52,47 @@ public:
         return result;
     }
 
-    constexpr operator T*() {
+    bool operator<=(const OwnedRef<T> &b) const {
+        int result = PyObject_RichCompareBool(ob, b, Py_LE);
+        if (unlikely(result < 0)) {
+            throw PythonError();
+        }
+        return result;
+    }
+
+    bool operator>(const OwnedRef<T> &b) const {
+        int result = PyObject_RichCompareBool(ob, b, Py_GT);
+        if (unlikely(result < 0)) {
+            throw PythonError();
+        }
+        return result;
+    }
+
+    bool operator>=(const OwnedRef<T> &b) const {
+        int result = PyObject_RichCompareBool(ob, b, Py_GE);
+        if (unlikely(result < 0)) {
+            throw PythonError();
+        }
+        return result;
+    }
+
+    bool operator==(const OwnedRef<T> &b) const {
+        int result = PyObject_RichCompareBool(ob, b, Py_EQ);
+        if (unlikely(result < 0)) {
+            throw PythonError();
+        }
+        return result;
+    }
+
+    bool operator!=(const OwnedRef<T> &b) const {
+        int result = PyObject_RichCompareBool(ob, b, Py_NE);
+        if (unlikely(result < 0)) {
+            throw PythonError();
+        }
+        return result;
+    }
+
+    constexpr operator T*() const {
         return ob;
     }
 };
@@ -69,6 +117,7 @@ namespace sortedmap {
     int traverse(object*, visitproc, void*);
     void clear(object*);
     PyObject *pyclear(object*);
+    PyObject *richcompare(object*, PyObject*, int);
     Py_ssize_t len(object*);
     PyObject *getitem(object*, PyObject*);
     int setitem(object*, PyObject*, PyObject*);
@@ -288,11 +337,19 @@ namespace sortedmap {
         PyObject*
         richcompare(object *self, PyObject *other, int opid)
         {
+            PyObject *it;
             PyObject *lhs;
             PyObject *rhs;
             PyObject *res;
 
-            if (!(lhs = iter(self->map))) {
+            if (!(it = iter(self->map))) {
+                return NULL;
+            }
+
+            lhs = PySet_New(it);
+            Py_DECREF(it);
+            if (!lhs) {
+                Py_DECREF(lhs);
                 return NULL;
             }
 
@@ -366,7 +423,7 @@ namespace sortedmap {
             0,                                              // tp_doc
             0,                                              // tp_traverse
             0,                                              // tp_clear
-            0,                                              // tp_richcompare
+            (richcmpfunc) abstractview::richcompare<keyiter::iter>,
             0,                                              // tp_weaklistoffset
             (getiterfunc) abstractview::iter<keyiter::iter> // tp_iter
         };
@@ -424,7 +481,7 @@ namespace sortedmap {
             0,                                              // tp_doc
             0,                                              // tp_traverse
             0,                                              // tp_clear
-            0,                                              // tp_richcompare
+            (richcmpfunc) abstractview::richcompare<valiter::iter>,
             0,                                              // tp_weaklistoffset
             (getiterfunc) abstractview::iter<valiter::iter> // tp_iter
         };
@@ -482,7 +539,7 @@ namespace sortedmap {
             0,                                              // tp_doc
             0,                                              // tp_traverse
             0,                                              // tp_clear
-            0,                                              // tp_richcompare
+            (richcmpfunc) abstractview::richcompare<itemiter::iter>,
             0,                                              // tp_weaklistoffset
             (getiterfunc) abstractview::iter<itemiter::iter>// tp_iter
         };
@@ -557,7 +614,7 @@ namespace sortedmap {
 
     PyTypeObject type = {
         PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        "sortedmap.sortedmap",                       // tp_name
+        "sortedmap.sortedmap",                      // tp_name
         sizeof(object),                             // tp_basicsize
         0,                                          // tp_itemsize
         (destructor) dealloc,                       // tp_dealloc
@@ -581,7 +638,7 @@ namespace sortedmap {
         sortedmap_doc,                              // tp_doc
         (traverseproc) traverse,                    // tp_traverse
         (inquiry) clear,                            // tp_clear
-        0,                                          // tp_richcompare
+        (richcmpfunc) richcompare,                  // tp_richcompare
         0,                                          // tp_weaklistoffset
         (getiterfunc) keyiter::iter,                // tp_iter
         0,                                          // tp_iternext

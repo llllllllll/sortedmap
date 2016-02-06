@@ -77,14 +77,14 @@ sortedmap::itemiter::iter(sortedmap::object *self)
 PyObject*
 sortedmap::abstractview::repr(sortedmap::abstractview::object *self)
 {
-    PyObject *asset;
+    PyObject *aslist;
     PyObject *ret;
 
-    if (!(asset = PySet_New((PyObject*) self))) {
+    if (!(aslist = PySequence_List((PyObject*) self))) {
         return NULL;
     }
-    ret = PyUnicode_FromFormat("%s(%R)", Py_TYPE(self)->tp_name, asset);
-    Py_DECREF(self);
+    ret = PyUnicode_FromFormat("%s(%R)", Py_TYPE(self)->tp_name, aslist);
+    Py_DECREF(aslist);
     return ret;
 }
 
@@ -180,6 +180,53 @@ sortedmap::pyclear(sortedmap::object *self)
     Py_RETURN_NONE;
 }
 
+PyObject *
+sortedmap::richcompare(sortedmap::object *self, PyObject *other, int opid)
+{
+    if (!(opid == Py_EQ || opid == Py_NE) || !sortedmap::check(other)) {
+        Py_RETURN_NOTIMPLEMENTED;
+    }
+
+    sortedmap::object *asmap = (sortedmap::object*) other;
+
+    if (self->map.size() != asmap->map.size()) {
+        if (opid == Py_EQ) {
+            Py_RETURN_FALSE;
+        }
+        else {
+            Py_RETURN_TRUE;
+        }
+    }
+
+    int status;
+    OwnedRef<PyObject> other_val;
+
+    for (const auto &pair : self->map) {
+        try{
+            other_val = asmap->map.at(std::get<0>(pair));
+        }
+        catch (std::out_of_range &e) {
+            if (opid == Py_EQ) {
+                Py_RETURN_FALSE;
+            }
+            else {
+                Py_RETURN_TRUE;
+            }
+        }
+        catch (PythonError &e) {
+            return NULL;
+        }
+        status = PyObject_RichCompareBool(std::get<1>(pair), other_val, opid);
+        if (status < 0) {
+            return NULL;
+        }
+        if (!status) {
+            Py_RETURN_FALSE;
+        }
+    }
+    Py_RETURN_TRUE;
+}
+
 Py_ssize_t
 sortedmap::len(sortedmap::object *self)
 {
@@ -196,6 +243,9 @@ sortedmap::getitem(sortedmap::object *self, PyObject *key)
         PyErr_SetObject(PyExc_KeyError, key);
         return NULL;
     }
+    catch (PythonError &e) {
+        return NULL;
+    }
 }
 
 int
@@ -206,7 +256,7 @@ sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value)
     }
     else {
         try {
-            self->map[key] = value;
+            self->map.emplace(key, value);
         }
         catch (PythonError &e) {
             return -1;
@@ -218,7 +268,12 @@ sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value)
 int
 sortedmap::contains(sortedmap::object *self, PyObject *key)
 {
-    return self->map.find(key) != self->map.end();
+    try {
+        return self->map.find(key) != self->map.end();
+    }
+    catch (PythonError &e) {
+        return -1;
+    }
 }
 
 PyObject*
@@ -262,7 +317,7 @@ merge(sortedmap::object *self, PyObject *other)
     if (sortedmap::check_exact(other)) {
         try {
             for (const auto &pair : ((sortedmap::object*) other)->map) {
-                self->map[std::get<0>(pair)] = std::get<1>(pair);
+                self->map.emplace(std::get<0>(pair), std::get<1>(pair));
             }
         }
         catch (PythonError &e) {
@@ -280,7 +335,7 @@ merge(sortedmap::object *self, PyObject *other)
 
         while (PyDict_Next(other, &pos, &key, &value)) {
             try {
-                self->map[key] = value;
+                self->map.emplace(key, value);
             }
             catch (PythonError &e) {
                 return false;
@@ -301,22 +356,22 @@ merge(sortedmap::object *self, PyObject *other)
         if (!it) {
             return false;
         }
-        for (key = PyIter_Next(it); key; key = PyIter_Next(it)) {
+        while ((key = PyIter_Next(it))) {
             if (!(tmp = PyObject_GetItem(other, key))) {
                 Py_DECREF(key);
                 Py_DECREF(it);
                 return false;
             }
             try {
-                self->map[key] = tmp;
+                self->map.emplace(key, tmp);
             }
             catch (PythonError &e) {
                 Py_DECREF(key);
                 Py_DECREF(it);
                 return false;
             }
+            Py_DECREF(key);
         }
-        Py_DECREF(key);
         Py_DECREF(it);
     }
     return true;
@@ -368,7 +423,7 @@ merge_from_seq2(sortedmap::object *self, PyObject *seq2)
         key = PySequence_Fast_GET_ITEM(fast, 0);
         value = PySequence_Fast_GET_ITEM(fast, 1);
         try{
-            self->map[key] = value;
+            self->map.emplace(key, value);
         }
         catch (PythonError &e) {
             goto fail;
