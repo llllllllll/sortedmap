@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <exception>
 #include <map>
 
@@ -13,6 +14,15 @@ template<typename T>
 class OwnedRef final{
 private:
     T *ob;  // The underlying object we own a reference to.
+
+    template<int opid>
+    bool richcompare(const OwnedRef<T> &b) const {
+        int result = PyObject_RichCompareBool(ob, b, opid);
+        if (unlikely(result < 0)) {
+            throw PythonError();
+        }
+        return result;
+    }
 
 public:
     OwnedRef<T>() {
@@ -45,51 +55,27 @@ public:
     }
 
     bool operator<(const OwnedRef<T> &b) const {
-        int result = PyObject_RichCompareBool(ob, b, Py_LT);
-        if (unlikely(result < 0)) {
-            throw PythonError();
-        }
-        return result;
+        return richcompare<Py_LT>(b);
     }
 
     bool operator<=(const OwnedRef<T> &b) const {
-        int result = PyObject_RichCompareBool(ob, b, Py_LE);
-        if (unlikely(result < 0)) {
-            throw PythonError();
-        }
-        return result;
+        return richcompare<Py_LE>(b);
     }
 
     bool operator>(const OwnedRef<T> &b) const {
-        int result = PyObject_RichCompareBool(ob, b, Py_GT);
-        if (unlikely(result < 0)) {
-            throw PythonError();
-        }
-        return result;
+        return richcompare<Py_GT>(b);
     }
 
     bool operator>=(const OwnedRef<T> &b) const {
-        int result = PyObject_RichCompareBool(ob, b, Py_GE);
-        if (unlikely(result < 0)) {
-            throw PythonError();
-        }
-        return result;
+        return richcompare<Py_GE>(b);
     }
 
     bool operator==(const OwnedRef<T> &b) const {
-        int result = PyObject_RichCompareBool(ob, b, Py_EQ);
-        if (unlikely(result < 0)) {
-            throw PythonError();
-        }
-        return result;
+        return richcompare<Py_EQ>(b);
     }
 
     bool operator!=(const OwnedRef<T> &b) const {
-        int result = PyObject_RichCompareBool(ob, b, Py_NE);
-        if (unlikely(result < 0)) {
-            throw PythonError();
-        }
-        return result;
+        return richcompare<Py_NE>(b);
     }
 
     constexpr operator T*() const {
@@ -140,7 +126,7 @@ namespace sortedmap {
 
         void dealloc(object*);
 
-        template<sortedmap::abstractiter::extract_element f>
+        template<extract_element f>
         PyObject*
         next(object *self)
         {
@@ -169,6 +155,37 @@ namespace sortedmap {
             new(&ret->map) OwnedRef<sortedmap::object>(self);
             return (PyObject*) ret;
         }
+
+        template<const char **name, extract_element elem>
+        PyTypeObject type = {
+            PyVarObject_HEAD_INIT(&PyType_Type, 0)
+            *name,                                      // tp_name
+            sizeof(object),                             // tp_basicsize
+            0,                                          // tp_itemsize
+            (destructor) dealloc,                       // tp_dealloc
+            0,                                          // tp_print
+            0,                                          // tp_getattr
+            0,                                          // tp_setattr
+            0,                                          // tp_reserved
+            0,                                          // tp_repr
+            0,                                          // tp_as_number
+            0,                                          // tp_as_sequence
+            0,                                          // tp_as_mapping
+            0,                                          // tp_hash
+            0,                                          // tp_call
+            0,                                          // tp_str
+            0,                                          // tp_getattro
+            0,                                          // tp_setattro
+            0,                                          // tp_as_buffer
+            Py_TPFLAGS_DEFAULT,                         // tp_flags
+            0,                                          // tp_doc
+            0,                                          // tp_traverse
+            0,                                          // tp_clear
+            0,                                          // tp_richcompare
+            0,                                          // tp_weaklistoffset
+            (getiterfunc) py_identity,                  // tp_iter
+            (iternextfunc) next<elem>,                  // tp_iternext
+        };
     }
 
     namespace keyiter {
@@ -176,36 +193,8 @@ namespace sortedmap {
 
         abstractiter::extract_element elem;
         iterfunc iter;
-
-        PyTypeObject type = {
-            PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            "sortedmap.keyiter",                        // tp_name
-            sizeof(object),                             // tp_basicsize
-            0,                                          // tp_itemsize
-            (destructor) abstractiter::dealloc,         // tp_dealloc
-            0,                                          // tp_print
-            0,                                          // tp_getattr
-            0,                                          // tp_setattr
-            0,                                          // tp_reserved
-            0,                                          // tp_repr
-            0,                                          // tp_as_number
-            0,                                          // tp_as_sequence
-            0,                                          // tp_as_mapping
-            0,                                          // tp_hash
-            0,                                          // tp_call
-            0,                                          // tp_str
-            0,                                          // tp_getattro
-            0,                                          // tp_setattro
-            0,                                          // tp_as_buffer
-            Py_TPFLAGS_DEFAULT,                         // tp_flags
-            0,                                          // tp_doc
-            0,                                          // tp_traverse
-            0,                                          // tp_clear
-            0,                                          // tp_richcompare
-            0,                                          // tp_weaklistoffset
-            (getiterfunc) py_identity,                  // tp_iter
-            (iternextfunc) abstractiter::next<elem>,    // tp_iternext
-        };
+        extern const char *name;
+        PyTypeObject type = abstractiter::type<&name, elem>;
     }
 
     namespace valiter {
@@ -213,36 +202,8 @@ namespace sortedmap {
 
         abstractiter::extract_element elem;
         iterfunc iter;
-
-        PyTypeObject type = {
-            PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            "sortedmap.valiter",                        // tp_name
-            sizeof(object),                             // tp_basicsize
-            0,                                          // tp_itemsize
-            (destructor) abstractiter::dealloc,         // tp_dealloc
-            0,                                          // tp_print
-            0,                                          // tp_getattr
-            0,                                          // tp_setattr
-            0,                                          // tp_reserved
-            0,                                          // tp_repr
-            0,                                          // tp_as_number
-            0,                                          // tp_as_sequence
-            0,                                          // tp_as_mapping
-            0,                                          // tp_hash
-            0,                                          // tp_call
-            0,                                          // tp_str
-            0,                                          // tp_getattro
-            0,                                          // tp_setattro
-            0,                                          // tp_as_buffer
-            Py_TPFLAGS_DEFAULT,                         // tp_flags
-            0,                                          // tp_doc
-            0,                                          // tp_traverse
-            0,                                          // tp_clear
-            0,                                          // tp_richcompare
-            0,                                          // tp_weaklistoffset
-            (getiterfunc) py_identity,                  // tp_iter
-            (iternextfunc) abstractiter::next<elem>,    // tp_iternext
-        };
+        extern const char *name;
+        PyTypeObject type = abstractiter::type<&name, elem>;
     }
 
     namespace itemiter {
@@ -250,36 +211,8 @@ namespace sortedmap {
 
         abstractiter::extract_element elem;
         iterfunc iter;
-
-        PyTypeObject type = {
-            PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            "sortedmap.itemiter",                       // tp_name
-            sizeof(object),                             // tp_basicsize
-            0,                                          // tp_itemsize
-            (destructor) abstractiter::dealloc,         // tp_dealloc
-            0,                                          // tp_print
-            0,                                          // tp_getattr
-            0,                                          // tp_setattr
-            0,                                          // tp_reserved
-            0,                                          // tp_repr
-            0,                                          // tp_as_number
-            0,                                          // tp_as_sequence
-            0,                                          // tp_as_mapping
-            0,                                          // tp_hash
-            0,                                          // tp_call
-            0,                                          // tp_str
-            0,                                          // tp_getattro
-            0,                                          // tp_setattro
-            0,                                          // tp_as_buffer
-            Py_TPFLAGS_DEFAULT,                         // tp_flags
-            0,                                          // tp_doc
-            0,                                          // tp_traverse
-            0,                                          // tp_clear
-            0,                                          // tp_richcompare
-            0,                                          // tp_weaklistoffset
-            (getiterfunc) py_identity,                  // tp_iter
-            (iternextfunc) abstractiter::next<elem>,    // tp_iternext
-        };
+        extern const char *name;
+        PyTypeObject type = abstractiter::type<&name, elem>;
     }
 
     namespace abstractview {
@@ -304,7 +237,7 @@ namespace sortedmap {
             return (PyObject*) ret;
         }
 
-        template<sortedmap::iterfunc iter, binaryfunc f>
+        template<iterfunc iter, binaryfunc f>
         PyObject*
         binop(object *self, PyObject* other)
         {
@@ -333,7 +266,7 @@ namespace sortedmap {
             return res;
         }
 
-        template<sortedmap::iterfunc iter>
+        template<iterfunc iter>
         PyObject*
         richcompare(object *self, PyObject *other, int opid)
         {
@@ -363,23 +296,17 @@ namespace sortedmap {
             return res;
         }
 
-        template<sortedmap::iterfunc iterf>
+        template<iterfunc iterf>
         PyObject*
         iter(object *self)
         {
             return iterf(self->map);
         }
-    }
 
-    namespace keyview {
-        using object = abstractview::object;
-
-        viewfunc view;
-
+        template<iterfunc iter>
         PyNumberMethods as_number = {
             0,                                              // nb_add
-            (binaryfunc) abstractview::binop<keyiter::iter,
-                                             PyNumber_Add>, // nb_subtract
+            (binaryfunc) binop<iter, PyNumber_Add>,         // nb_subtract
             0,                                              // nb_multiply
             0,                                              // nb_remainder
             0,                                              // nb_divmod
@@ -391,31 +318,29 @@ namespace sortedmap {
             0,                                              // nb_invert
             0,                                              // nb_lshift
             0,                                              // nb_rshift
-            (binaryfunc) abstractview::binop<keyiter::iter,
-                                             PyNumber_And>, // nb_and
-            (binaryfunc) abstractview::binop<keyiter::iter,
-                                             PyNumber_Xor>, // nb_xor
-            (binaryfunc) abstractview::binop<keyiter::iter,
-                                             PyNumber_Or>,  // nb_or
+            (binaryfunc) binop<iter, PyNumber_And>,         // nb_and
+            (binaryfunc) binop<iter, PyNumber_Xor>,         // nb_xor
+            (binaryfunc) binop<iter, PyNumber_Or>,          // nb_or
         };
 
+        template<const char **name, iterfunc iterf>
         PyTypeObject type = {
             PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            "sortedmap.keyview",                            // tp_name
+            *name,                                          // tp_name
             sizeof(object),                                 // tp_basicsize
             0,                                              // tp_itemsize
-            (destructor) abstractview::dealloc,             // tp_dealloc
+            (destructor) dealloc,                           // tp_dealloc
             0,                                              // tp_print
             0,                                              // tp_getattr
             0,                                              // tp_setattr
             0,                                              // tp_reserved
-            (reprfunc) abstractview::repr,                  // tp_repr
-            &as_number,                                     // tp_as_number
+            (reprfunc) repr,                                // tp_repr
+            &as_number<iterf>,                              // tp_as_number
             0,                                              // tp_as_sequence
             0,                                              // tp_as_mapping
             0,                                              // tp_hash
             0,                                              // tp_call
-            (reprfunc) abstractview::repr,                  // tp_str
+            (reprfunc) repr,                                // tp_str
             0,                                              // tp_getattro
             0,                                              // tp_setattro
             0,                                              // tp_as_buffer
@@ -423,126 +348,33 @@ namespace sortedmap {
             0,                                              // tp_doc
             0,                                              // tp_traverse
             0,                                              // tp_clear
-            (richcmpfunc) abstractview::richcompare<keyiter::iter>,
+            (richcmpfunc) richcompare<iterf>,               // tp_richcompare
             0,                                              // tp_weaklistoffset
-            (getiterfunc) abstractview::iter<keyiter::iter> // tp_iter
+            (getiterfunc) iter<iterf>                       // tp_iter
         };
+    }
+
+    namespace keyview {
+        using object = abstractview::object;
+        viewfunc view;
+        extern const char *name;
+        PyTypeObject type = abstractview::type<&name, keyiter::iter>;
     }
 
     namespace valview {
         using object = abstractview::object;
 
         viewfunc view;
-
-        PyNumberMethods as_number = {
-            0,                                              // nb_add
-            (binaryfunc) abstractview::binop<valiter::iter,
-                                             PyNumber_Add>, // nb_subtract
-            0,                                              // nb_multiply
-            0,                                              // nb_remainder
-            0,                                              // nb_divmod
-            0,                                              // nb_power
-            0,                                              // nb_negative
-            0,                                              // nb_positive
-            0,                                              // nb_absolute
-            0,                                              // nb_bool
-            0,                                              // nb_invert
-            0,                                              // nb_lshift
-            0,                                              // nb_rshift
-            (binaryfunc) abstractview::binop<valiter::iter,
-                                             PyNumber_And>, // nb_and
-            (binaryfunc) abstractview::binop<valiter::iter,
-                                             PyNumber_Xor>, // nb_xor
-            (binaryfunc) abstractview::binop<valiter::iter,
-                                             PyNumber_Or>,  // nb_or
-        };
-
-        PyTypeObject type = {
-            PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            "sortedmap.valview",                            // tp_name
-            sizeof(object),                                 // tp_basicsize
-            0,                                              // tp_itemsize
-            (destructor) abstractview::dealloc,             // tp_dealloc
-            0,                                              // tp_print
-            0,                                              // tp_getattr
-            0,                                              // tp_setattr
-            0,                                              // tp_reserved
-            (reprfunc) abstractview::repr,                  // tp_repr
-            &as_number,                                     // tp_as_number
-            0,                                              // tp_as_sequence
-            0,                                              // tp_as_mapping
-            0,                                              // tp_hash
-            0,                                              // tp_call
-            (reprfunc) abstractview::repr,                  // tp_str
-            0,                                              // tp_getattro
-            0,                                              // tp_setattro
-            0,                                              // tp_as_buffer
-            Py_TPFLAGS_DEFAULT,                             // tp_flags
-            0,                                              // tp_doc
-            0,                                              // tp_traverse
-            0,                                              // tp_clear
-            (richcmpfunc) abstractview::richcompare<valiter::iter>,
-            0,                                              // tp_weaklistoffset
-            (getiterfunc) abstractview::iter<valiter::iter> // tp_iter
-        };
+        extern const char *name;
+        PyTypeObject type = abstractview::type<&name, valiter::iter>;
     }
 
     namespace itemview {
         using object = abstractview::object;
 
         viewfunc view;
-
-        PyNumberMethods as_number = {
-            0,                                              // nb_add
-            (binaryfunc) abstractview::binop<itemiter::iter,
-                                             PyNumber_Add>, // nb_subtract
-            0,                                              // nb_multiply
-            0,                                              // nb_remainder
-            0,                                              // nb_divmod
-            0,                                              // nb_power
-            0,                                              // nb_negative
-            0,                                              // nb_positive
-            0,                                              // nb_absolute
-            0,                                              // nb_bool
-            0,                                              // nb_invert
-            0,                                              // nb_lshift
-            0,                                              // nb_rshift
-            (binaryfunc) abstractview::binop<itemiter::iter,
-                                             PyNumber_And>, // nb_and
-            (binaryfunc) abstractview::binop<itemiter::iter,
-                                             PyNumber_Xor>, // nb_xor
-            (binaryfunc) abstractview::binop<itemiter::iter,
-                                             PyNumber_Or>,  // nb_or
-        };
-
-        PyTypeObject type = {
-            PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            "sortedmap.itemview",                           // tp_name
-            sizeof(object),                                 // tp_basicsize
-            0,                                              // tp_itemsize
-            (destructor) abstractview::dealloc,             // tp_dealloc
-            0,                                              // tp_print
-            0,                                              // tp_getattr
-            0,                                              // tp_setattr
-            0,                                              // tp_reserved
-            (reprfunc) abstractview::repr,                  // tp_repr
-            &as_number,                                     // tp_as_number
-            0,                                              // tp_as_sequence
-            0,                                              // tp_as_mapping
-            0,                                              // tp_hash
-            0,                                              // tp_call
-            (reprfunc) abstractview::repr,                  // tp_str
-            0,                                              // tp_getattro
-            0,                                              // tp_setattro
-            0,                                              // tp_as_buffer
-            Py_TPFLAGS_DEFAULT,                             // tp_flags
-            0,                                              // tp_doc
-            0,                                              // tp_traverse
-            0,                                              // tp_clear
-            (richcmpfunc) abstractview::richcompare<itemiter::iter>,
-            0,                                              // tp_weaklistoffset
-            (getiterfunc) abstractview::iter<itemiter::iter>// tp_iter
-        };
+        extern const char *name;
+        PyTypeObject type = abstractview::type<&name, itemiter::iter>;
     }
 
     PySequenceMethods as_sequence = {

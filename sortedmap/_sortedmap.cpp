@@ -1,3 +1,4 @@
+#include <vector>
 #include <exception>
 #include <map>
 
@@ -9,6 +10,13 @@ py_identity(PyObject *ob)
     Py_INCREF(ob);
     return ob;
 }
+
+const char *sortedmap::keyiter::name = "sortedmap.keyiter";
+const char *sortedmap::valiter::name = "sortedmap.valiter";
+const char *sortedmap::itemiter::name = "sortedmap.itemiter";
+const char *sortedmap::keyview::name = "sortedmap.keyview";
+const char *sortedmap::valview::name = "sortedmap.valview";
+const char *sortedmap::itemview::name = "sortedmap.itemview";
 
 bool
 sortedmap::check(PyObject *ob)
@@ -496,10 +504,19 @@ extern "C" {
 PyMODINIT_FUNC
 PyInit__sortedmap(void)
 {
+    std::vector<PyTypeObject*> ts = {&sortedmap::type,
+                                     &sortedmap::keyiter::type,
+                                     &sortedmap::valiter::type,
+                                     &sortedmap::itemiter::type,
+                                     &sortedmap::keyview::type,
+                                     &sortedmap::valview::type,
+                                     &sortedmap::itemiter::type};
     PyObject *m;
 
-    if (PyType_Ready(&sortedmap::type)) {
-        return NULL;
+    for (const auto &t : ts) {
+        if (PyType_Ready(t)) {
+            return NULL;
+        }
     }
 
     if (!(m = PyModule_Create(&_sortedmap_module))) {

@@ -38,7 +38,7 @@ setup(
                 '-Wextra',
                 '-Wno-missing-field-initializers',
                 '-Wno-unused-parameter',
-                '-std=gnu++11',
+                '-std=gnu++14',
             ],
             language='c++',
         ),
