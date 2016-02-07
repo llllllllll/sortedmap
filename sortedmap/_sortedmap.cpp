@@ -142,17 +142,13 @@ innernew(PyTypeObject *cls)
 sortedmap::object*
 sortedmap::newobject(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
-    sortedmap::object *self;
+    return innernew(cls);
+}
 
-    if (unlikely(!(self = innernew(cls)))) {
-        return NULL;
-    }
-
-    if (unlikely(!sortedmap::update(self, args, kwargs))) {
-        Py_DECREF(self);
-        return NULL;
-    }
-    return self;
+int
+sortedmap::init(sortedmap::object *self, PyObject *args, PyObject *kwargs)
+{
+    return sortedmap::update(self, args, kwargs);
 }
 
 void
@@ -264,7 +260,7 @@ sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value)
     }
     else {
         try {
-            self->map.emplace(key, value);
+            self->map[key] = value;
         }
         catch (PythonError &e) {
             return -1;
@@ -325,7 +321,7 @@ merge(sortedmap::object *self, PyObject *other)
     if (sortedmap::check_exact(other)) {
         try {
             for (const auto &pair : ((sortedmap::object*) other)->map) {
-                self->map.emplace(std::get<0>(pair), std::get<1>(pair));
+                self->map[std::get<0>(pair)] = std::get<1>(pair);
             }
         }
         catch (PythonError &e) {
@@ -343,7 +339,7 @@ merge(sortedmap::object *self, PyObject *other)
 
         while (PyDict_Next(other, &pos, &key, &value)) {
             try {
-                self->map.emplace(key, value);
+                self->map[key] = value;
             }
             catch (PythonError &e) {
                 return false;
@@ -371,7 +367,7 @@ merge(sortedmap::object *self, PyObject *other)
                 return false;
             }
             try {
-                self->map.emplace(key, tmp);
+                self->map[key] = tmp;
             }
             catch (PythonError &e) {
                 Py_DECREF(key);
@@ -434,7 +430,7 @@ merge_from_seq2(sortedmap::object *self, PyObject *seq2)
         key = PySequence_Fast_GET_ITEM(fast, 0);
         value = PySequence_Fast_GET_ITEM(fast, 1);
         try{
-            self->map.emplace(key, value);
+            self->map[key] = value;
         }
         catch (PythonError &e) {
             goto fail;

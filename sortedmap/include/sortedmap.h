@@ -99,6 +99,7 @@ namespace sortedmap {
     typedef PyObject *iterfunc(object*);
     typedef PyObject *viewfunc(object*);
     object *newobject(PyTypeObject*, PyObject*, PyObject*);
+    int init(object*, PyObject*, PyObject*);
     void dealloc(object*);
     int traverse(object*, visitproc, void*);
     void clear(object*);
@@ -156,10 +157,10 @@ namespace sortedmap {
             return (PyObject*) ret;
         }
 
-        template<const char **name, extract_element elem>
+        template<const char *&name, extract_element elem>
         PyTypeObject type = {
             PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            *name,                                      // tp_name
+            name,                                       // tp_name
             sizeof(object),                             // tp_basicsize
             0,                                          // tp_itemsize
             (destructor) dealloc,                       // tp_dealloc
@@ -194,7 +195,7 @@ namespace sortedmap {
         abstractiter::extract_element elem;
         iterfunc iter;
         extern const char *name;
-        PyTypeObject type = abstractiter::type<&name, elem>;
+        PyTypeObject type = abstractiter::type<name, elem>;
     }
 
     namespace valiter {
@@ -203,7 +204,7 @@ namespace sortedmap {
         abstractiter::extract_element elem;
         iterfunc iter;
         extern const char *name;
-        PyTypeObject type = abstractiter::type<&name, elem>;
+        PyTypeObject type = abstractiter::type<name, elem>;
     }
 
     namespace itemiter {
@@ -212,7 +213,7 @@ namespace sortedmap {
         abstractiter::extract_element elem;
         iterfunc iter;
         extern const char *name;
-        PyTypeObject type = abstractiter::type<&name, elem>;
+        PyTypeObject type = abstractiter::type<name, elem>;
     }
 
     namespace abstractview {
@@ -323,10 +324,10 @@ namespace sortedmap {
             (binaryfunc) binop<iter, PyNumber_Or>,          // nb_or
         };
 
-        template<const char **name, iterfunc iterf>
+        template<const char *&name, iterfunc iterf>
         PyTypeObject type = {
             PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            *name,                                          // tp_name
+            name,                                           // tp_name
             sizeof(object),                                 // tp_basicsize
             0,                                              // tp_itemsize
             (destructor) dealloc,                           // tp_dealloc
@@ -358,7 +359,7 @@ namespace sortedmap {
         using object = abstractview::object;
         viewfunc view;
         extern const char *name;
-        PyTypeObject type = abstractview::type<&name, keyiter::iter>;
+        PyTypeObject type = abstractview::type<name, keyiter::iter>;
     }
 
     namespace valview {
@@ -366,7 +367,7 @@ namespace sortedmap {
 
         viewfunc view;
         extern const char *name;
-        PyTypeObject type = abstractview::type<&name, valiter::iter>;
+        PyTypeObject type = abstractview::type<name, valiter::iter>;
     }
 
     namespace itemview {
@@ -374,7 +375,7 @@ namespace sortedmap {
 
         viewfunc view;
         extern const char *name;
-        PyTypeObject type = abstractview::type<&name, itemiter::iter>;
+        PyTypeObject type = abstractview::type<name, itemiter::iter>;
     }
 
     PySequenceMethods as_sequence = {
@@ -482,7 +483,7 @@ namespace sortedmap {
         0,                                          // tp_descr_get
         0,                                          // tp_descr_set
         0,                                          // tp_dictoffset
-        0,                                          // tp_init
+        (initproc) init,                            // tp_init
         0,                                          // tp_alloc
         (newfunc) newobject,                        // tp_new
     };
