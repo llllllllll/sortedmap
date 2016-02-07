@@ -45,12 +45,7 @@ public:
         this->ob = ob;
     }
 
-    OwnedRef<T>(const OwnedRef<T> &ref) {
-        ob = ref.ob;
-        if (likely(ob)) {
-            Py_INCREF(ob);
-        }
-    }
+    OwnedRef<T>(const OwnedRef<T> &ref) : OwnedRef<T>(ref.ob) {}
 
     ~OwnedRef<T>() {
         if (likely(ob)) {
@@ -118,12 +113,18 @@ namespace sortedmap {
     PyObject *richcompare(object*, PyObject*, int);
     Py_ssize_t len(object*);
     PyObject *getitem(object*, PyObject*);
+    PyObject *get(object*, PyObject*, PyObject*);
+    PyObject *pyget(object*, PyObject*, PyObject*);
+    PyObject *pop(object*, PyObject*, PyObject*);
+    PyObject *pypop(object*, PyObject*, PyObject*);
     int setitem(object*, PyObject*, PyObject*);
     int contains(object*, PyObject*);
     PyObject *repr(object*);
     object *copy(object*);
     bool update(object*, PyObject*, PyObject*);
     PyObject *pyupdate(object*, PyObject*, PyObject*);
+    object *fromkeys(PyTypeObject*, PyObject*, PyObject*);
+    object *pyfromkeys(PyObject*, PyObject*, PyObject*);
 
     PyDoc_STRVAR(iter_revision_doc,
                  "An internal counter used to invalidate iterators after"
@@ -459,6 +460,57 @@ namespace sortedmap {
                  "it : iterable[key, value]\n"
                  "**kwargs\n"
                  "    The mappings to update this sortedmap with.\n");
+    PyDoc_STRVAR(fromkeys_doc,
+                 "Create a new sortedmap with keys from ``seq`` all mapping\n"
+                 "to ``value``.\n"
+                 "\n"
+                 "Parameters\n"
+                 "seq : iterable\n"
+                 "    The keys to use for the new sortedmap.\n"
+                 "value : any\n"
+                 "    The value that all the keys will map to.\n"
+                 "\n"
+                 "Returns\n"
+                 "-------\n"
+                 "m : sortedmap\n"
+                 "    The new sorted map object.\n");
+    PyDoc_STRVAR(get_doc,
+                 "Lookup a key in the sortedmap. If the key is not present\n"
+                 "return ``default`` instead.\n"
+                 "\n"
+                 "Parameters\n"
+                 "----------\n"
+                 "key : any\n"
+                 "    The key to lookup.\n"
+                 "default, optional\n"
+                 "    The value to return if ``key`` is not in this map\n"
+                 "    This defaults to None.\n"
+                 "\n"
+                 "Returns\n"
+                 "-------\n"
+                 "val : any\n"
+                 "    self[key] if key in self else default\n");
+    PyDoc_STRVAR(pop_doc,
+                 "Remove a key in the sortedmap. This method returns the\n"
+                 "value associated with the given key.\n"
+                 "\n"
+                 "Parameters\n"
+                 "----------\n"
+                 "key : any\n"
+                 "    The key to lookup.\n"
+                 "default, optional\n"
+                 "    The value to return if ``key`` is not in this map\n"
+                 "    This defaults to None.\n"
+                 "\n"
+                 "Returns\n"
+                 "-------\n"
+                 "val : any\n"
+                 "    self[key] if key in self else default\n"
+                 "\n"
+                 "Raises\n"
+                 "------\n"
+                 "KeyError\n"
+                 "    Raised when ``key`` not in self.\n");
 
     PyMethodDef methods[] = {
         {"keys", (PyCFunction) keyview::view, METH_NOARGS, keys_doc},
@@ -466,7 +518,12 @@ namespace sortedmap {
         {"items", (PyCFunction) itemview::view, METH_NOARGS, items_doc},
         {"clear", (PyCFunction) pyclear, METH_NOARGS, clear_doc},
         {"copy", (PyCFunction) copy, METH_NOARGS, copy_doc},
-        {"update", (PyCFunction) pyupdate, METH_KEYWORDS, update_doc},
+        {"update", (PyCFunction) pyupdate,
+         METH_VARARGS | METH_KEYWORDS, update_doc},
+        {"fromkeys", (PyCFunction) pyfromkeys,
+         METH_CLASS | METH_VARARGS | METH_KEYWORDS, fromkeys_doc},
+        {"get", (PyCFunction) pyget, METH_VARARGS | METH_KEYWORDS, get_doc},
+        {"pop", (PyCFunction) pypop, METH_VARARGS | METH_KEYWORDS, pop_doc},
         {NULL},
     };
 

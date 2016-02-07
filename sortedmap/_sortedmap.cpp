@@ -147,7 +147,7 @@ sortedmap::newobject(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 int
 sortedmap::init(sortedmap::object *self, PyObject *args, PyObject *kwargs)
 {
-    return sortedmap::update(self, args, kwargs);
+    return (sortedmap::update(self, args, kwargs)) ? 0 : -1;
 }
 
 void
@@ -239,26 +239,114 @@ sortedmap::len(sortedmap::object *self)
 PyObject*
 sortedmap::getitem(sortedmap::object *self, PyObject *key)
 {
-    try{
-        return self->map.at(key).incref();
-    }
-    catch (std::out_of_range &e) {
-        PyErr_SetObject(PyExc_KeyError, key);
-        return NULL;
+    try {
+        const auto &it = self->map.find(key);
+        if (it == self->map.end()) {
+            PyErr_SetObject(PyExc_KeyError, key);
+            return NULL;
+        }
+        return std::get<1>(*it).incref();
     }
     catch (PythonError &e) {
         return NULL;
     }
 }
 
+PyObject*
+sortedmap::get(sortedmap::object *self, PyObject *key, PyObject *def)
+{
+    try {
+        const auto &it = self->map.find(key);
+        if (it == self->map.end()) {
+            Py_INCREF(def);
+            return def;
+        }
+        return std::get<1>(*it).incref();
+    }
+    catch (PythonError &e) {
+        return NULL;
+    }
+}
+
+PyObject*
+sortedmap::pyget(sortedmap::object *self, PyObject *args, PyObject *kwargs)
+{
+    const char *keywords[] = {"key", "default", NULL};
+    PyObject *key;
+    PyObject *def = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args,
+                                     kwargs,
+                                     "O|O:get",
+                                     (char**) keywords,
+                                     &key,
+                                     &def)) {
+        return NULL;
+    }
+
+    if (!def) {
+        def = Py_None;
+    }
+
+    return sortedmap::get(self, key, def);
+}
+
+PyObject*
+sortedmap::pop(sortedmap::object *self, PyObject *key, PyObject *def)
+{
+    try {
+        PyObject *ret;
+
+        const auto &it = self->map.find(key);
+        if (it == self->map.end()) {
+            if (!def) {
+                PyErr_SetObject(PyExc_KeyError, key);
+            }
+            else {
+                Py_INCREF(def);
+            }
+            return def;
+        }
+        ret = std::get<1>(*it).incref();
+        // use the same iterator to the item for a faster erase
+        self->map.erase(it);
+        ++self->iter_revision;
+        return ret;
+    }
+    catch (PythonError &e) {
+        return NULL;
+    }
+}
+
+PyObject*
+sortedmap::pypop(sortedmap::object *self, PyObject *args, PyObject *kwargs)
+{
+    const char *keywords[] = {"key", "default", NULL};
+    PyObject *key;
+    PyObject *def = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args,
+                                     kwargs,
+                                     "O|O:pop",
+                                     (char**) keywords,
+                                     &key,
+                                     &def)) {
+        return NULL;
+    }
+
+    return sortedmap::pop(self, key, def);
+}
+
 static void
 setitem_throws(sortedmap::object *self, PyObject *key, PyObject *value)
 {
-    OwnedRef<PyObject> &val = self->map[key];
-    if (!val.ob) {
-        self->iter_revision += 1;
+    const auto &pair = self->map.emplace(key, value);
+    if (std::get<1>(pair)) {
+        ++self->iter_revision;
     }
-    val = std::move(OwnedRef<PyObject>(value));
+    else {
+        std::get<1>(*std::get<0>(pair)) = std::move(OwnedRef<PyObject>(value));
+    }
 }
 
 int
@@ -267,7 +355,7 @@ sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value)
     try {
         if (!value) {
             self->map.erase(key);
-            self->iter_revision += 1;
+            ++self->iter_revision;
         }
         else {
             setitem_throws(self, key, value);
@@ -421,14 +509,14 @@ merge_from_seq2(sortedmap::object *self, PyObject *seq2)
             if (PyErr_ExceptionMatches(PyExc_TypeError))
                 PyErr_Format(PyExc_TypeError,
                              "cannot convert sortedmap update "
-                             "sequence element #%zd to a sequence",
+                             "sequence element %zd to a sequence",
                              n);
             goto fail;
         }
         len = PySequence_Fast_GET_SIZE(fast);
         if (unlikely(len != 2)) {
             PyErr_Format(PyExc_ValueError,
-                         "sortedmap update sequence element #%zd "
+                         "sortedmap update sequence element %zd "
                          "has length %zd; 2 is required",
                          n, len);
             goto fail;
@@ -467,7 +555,7 @@ sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
         return false;
     }
 
-    else if (arg) {
+    if (arg) {
 #if !COMPILING_IN_PY2
         _Py_IDENTIFIER(keys);
 
@@ -486,7 +574,7 @@ sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
             }
         }
     }
-    if (kwargs) {
+    if (kwargs && PyDict_Size(kwargs)) {
         if (unlikely(!merge(self, kwargs))) {
             return false;
         }
@@ -502,6 +590,57 @@ sortedmap::pyupdate(sortedmap::object *self, PyObject *args, PyObject *kwargs)
     }
     Py_RETURN_NONE;
 }
+
+sortedmap::object*
+sortedmap::fromkeys(PyTypeObject *cls, PyObject *seq, PyObject *value) {
+    sortedmap::object *self;
+    PyObject *it;
+    PyObject *key;
+
+    if (unlikely(!(it = PyObject_GetIter(seq)))) {
+        return NULL;
+    }
+
+    if (unlikely(!(self = innernew(cls)))) {
+        Py_DECREF(it);
+        return NULL;
+    }
+
+    while ((key = PyIter_Next(it))) {
+        self->map[key] = value;
+        Py_DECREF(key);
+    }
+    Py_DECREF(it);
+    if (unlikely(PyErr_Occurred())) {
+        return NULL;
+    }
+
+    return self;
+}
+
+sortedmap::object*
+sortedmap::pyfromkeys(PyObject *cls, PyObject *args, PyObject *kwargs)
+{
+    const char *keywords[] = {"seq", "value", NULL};
+    PyObject *seq;
+    PyObject *value = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args,
+                                     kwargs,
+                                     "O|O:fromkeys",
+                                     (char**) keywords,
+                                     &seq,
+                                     &value)) {
+        return NULL;
+    }
+
+    if (!value) {
+        value = Py_None;
+    }
+
+    return sortedmap::fromkeys((PyTypeObject*) cls, seq, value);
+}
+
 
 #define MODULE_NAME "sortedmap._sortedmap"
 PyDoc_STRVAR(module_doc,

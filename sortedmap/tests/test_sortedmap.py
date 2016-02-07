@@ -6,11 +6,17 @@ from sortedmap import sortedmap
 
 
 def test_from_kwargs():
-    assert list(sortedmap(a=1, b=2, c=3)) == list('abc')
+    assert (
+        list(sortedmap(a=1, b=2, c=3).items()) ==
+        list(zip('abc', (1, 2, 3)))
+    )
 
 
 def test_from_dict():
-    assert list(sortedmap({'a': 1, 'b': 2, 'c': 3})) == list('abc')
+    assert (
+        list(sortedmap({'a': 1, 'b': 2, 'c': 3}).items()) ==
+        list(zip('abc', (1, 2, 3)))
+    )
 
 
 def test_from_mapping():
@@ -24,11 +30,17 @@ def test_from_mapping():
         def keys(self):
             return self._map.keys()
 
-    assert list(sortedmap(M())) == list('abc')
+    assert (
+        list(sortedmap(M()).items()) ==
+        list(zip('abc', (1, 2, 3)))
+    )
 
 
 def test_from_seq2():
-    assert list(sortedmap([('a', 1), ('b', 2), ('c', 3)])) == list('abc')
+    assert (
+        list(sortedmap([('a', 1), ('b', 2), ('c', 3)]).items()) ==
+        list(zip('abc', (1, 2, 3)))
+    )
 
 
 def test_from_sortedmap():
@@ -38,6 +50,55 @@ def test_from_sortedmap():
     assert m is not n
     m['d'] = 4
     assert n != m
+
+
+@pytest.fixture
+def m():
+    m = sortedmap()
+    m['a'] = 1
+    m['b'] = 2
+    m['c'] = 3
+    return m
+
+
+def test_update_kwargs(m):
+    m.update(a=4, b=5, d=6)
+    assert m == sortedmap(
+        a=4,
+        b=5,
+        c=3,
+        d=6,
+    )
+
+
+def test_update_dict(m):
+    m.update({'a': 4, 'b': 5, 'd': 6})
+    assert m == sortedmap(
+        a=4,
+        b=5,
+        c=3,
+        d=6,
+    )
+
+
+def test_update_mapping(m):
+    class M:
+        def __init__(self):
+            self._map = {'a': 4, 'b': 5, 'd': 6}
+
+        def __getitem__(self, key):
+            return self._map[key]
+
+        def keys(self):
+            return self._map.keys()
+
+    m.update(M())
+    assert m == sortedmap(
+        a=4,
+        b=5,
+        c=3,
+        d=6,
+    )
 
 
 def test_is_mapping():
