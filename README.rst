@@ -3,7 +3,7 @@
 
 A sorted mapping object.
 
-``sortedmap`` is a python dict api interface to the C++ std::map type.
+``sortedmap`` is a python ``dict`` api interface to the C++ ``std::map type``.
 ``sortedmap`` implements the full ``dict`` object interface with a few
 additions:
 
