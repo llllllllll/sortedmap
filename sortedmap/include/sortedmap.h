@@ -145,13 +145,13 @@ namespace sortedmap {
                  " the map changes size.");
 
     namespace abstractiter {
-        using itertype = decltype(std::declval<maptype>().cbegin());
+        using itertype = maptype::const_iterator;
         typedef PyObject *extract_element(itertype);
 
         struct object {
             PyObject_HEAD
             itertype iter;
-            decltype(std::declval<maptype>().cend()) end;
+            itertype end;
             OwnedRef<sortedmap::object> map;
             // the revision of the map when this iter was created.
             unsigned long iter_revision;
