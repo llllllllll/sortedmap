@@ -477,6 +477,11 @@ sortedmap::copy(sortedmap::object *self) {
 static bool
 merge(sortedmap::object *self, PyObject *other) {
     if (sortedmap::check_exact(other)) {
+        if (!self->map.size()) {
+            // fast path for copy constructor
+            self->map = ((sortedmap::object*) other)->map;
+            return true;
+        }
         try {
             for (const auto &pair : ((sortedmap::object*) other)->map) {
                 setitem_throws(self, std::get<0>(pair), std::get<1>(pair));
