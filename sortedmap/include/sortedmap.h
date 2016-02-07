@@ -23,7 +23,7 @@ template<typename T>
 class OwnedRef final {
 private:
     template<int opid>
-    bool richcompare(const OwnedRef<T> &b) const {
+    bool inline richcompare(const OwnedRef<T> &b) const {
         int result = PyObject_RichCompareBool(ob, b, opid);
         if (unlikely(result < 0)) {
             throw PythonError();
@@ -31,7 +31,7 @@ private:
         return result;
     }
 
-    void construct(T *ob) {
+    void inline construct(T *ob) {
         if (likely(ob)) {
             Py_INCREF(ob);
         }
@@ -127,7 +127,11 @@ namespace sortedmap {
     PyObject *pyget(object*, PyObject*, PyObject*);
     PyObject *pop(object*, PyObject*, PyObject*);
     PyObject *pypop(object*, PyObject*, PyObject*);
+    PyObject *popitem(object*, bool);
+    PyObject *pypopitem(object*, PyObject*, PyObject*);
     int setitem(object*, PyObject*, PyObject*);
+    PyObject *setdefault(object*, PyObject*, PyObject*);
+    PyObject *pysetdefault(object*, PyObject *, PyObject*);
     int contains(object*, PyObject*);
     PyObject *repr(object*);
     object *copy(object*);
@@ -157,8 +161,7 @@ namespace sortedmap {
 
         template<extract_element f>
         PyObject*
-        next(object *self)
-        {
+        next(object *self) {
             PyObject *ret;
 
             if (unlikely(self->iter_revision != self->map.ob->iter_revision)) {
@@ -177,8 +180,7 @@ namespace sortedmap {
 
         template<typename iterobject, PyTypeObject &cls>
         PyObject*
-        iter(sortedmap::object *self)
-        {
+        iter(sortedmap::object *self) {
             iterobject *ret = PyObject_New(iterobject, &cls);
             if (!ret) {
                 return NULL;
@@ -272,8 +274,7 @@ namespace sortedmap {
 
         template<typename viewobject, PyTypeObject &cls>
         PyObject*
-        view(sortedmap::object *self)
-        {
+        view(sortedmap::object *self) {
             viewobject *ret = PyObject_New(viewobject, &cls);
             if (!ret) {
                 return NULL;
@@ -285,8 +286,7 @@ namespace sortedmap {
 
         template<iterfunc iter, binaryfunc f>
         PyObject*
-        binop(object *self, PyObject* other)
-        {
+        binop(object *self, PyObject* other) {
             PyObject *it;
             PyObject *lhs;
             PyObject *rhs;
@@ -314,8 +314,7 @@ namespace sortedmap {
 
         template<iterfunc iter>
         PyObject*
-        richcompare(object *self, PyObject *other, int opid)
-        {
+        richcompare(object *self, PyObject *other, int opid) {
             PyObject *it;
             PyObject *lhs;
             PyObject *rhs;
@@ -344,8 +343,7 @@ namespace sortedmap {
 
         template<iterfunc iterf>
         PyObject*
-        iter(object *self)
-        {
+        iter(object *self) {
             return iterf(self->map);
         }
 
@@ -521,6 +519,42 @@ namespace sortedmap {
                  "------\n"
                  "KeyError\n"
                  "    Raised when ``key`` not in self.\n");
+    PyDoc_STRVAR(popitem_doc,
+                 "Remove the first or last (key, value) pair.\n"
+                 "\n"
+                 "Parameters\n"
+                 "----------\n"
+                 "first : bool, optional\n"
+                 "    Should this remove the first pair?\n"
+                 "    This defaults to True.\n"
+                 "\n"
+                 "Returns\n"
+                 "-------\n"
+                 "pair : tuple[key, value]\n"
+                 "    The first or last pair that has been removed from the\n"
+                 "    sortedmap.\n"
+                 "\n"
+                 "Raises\n"
+                 "------\n"
+                 "KeyError\n"
+                 "    Raised when the sortedmap is empty\n");
+    PyDoc_STRVAR(setdefault_doc,
+                 "Set a default value for a key.\n"
+                 "\n"
+                 "Parameters\n"
+                 "----------\n"
+                 "\n"
+                 "key : any\n"
+                 "    The key to set the default for.\n"
+                 "default : any, optional\n"
+                 "    The default value to set.\n"
+                 "    This defaults to None.\n"
+                 "\n"
+                 "Returns\n"
+                 "-------\n"
+                 "value : any\n"
+                 "    The value for ``key``. This might not be ``default`` if\n"
+                 "    ``key`` was already in the map.\n");
 
     PyMethodDef methods[] = {
         {"keys", (PyCFunction) keyview::view, METH_NOARGS, keys_doc},
@@ -534,6 +568,10 @@ namespace sortedmap {
          METH_CLASS | METH_VARARGS | METH_KEYWORDS, fromkeys_doc},
         {"get", (PyCFunction) pyget, METH_VARARGS | METH_KEYWORDS, get_doc},
         {"pop", (PyCFunction) pypop, METH_VARARGS | METH_KEYWORDS, pop_doc},
+        {"popitem", (PyCFunction) pypopitem,
+         METH_VARARGS | METH_KEYWORDS, popitem_doc},
+        {"setdefault", (PyCFunction) pysetdefault,
+         METH_VARARGS | METH_KEYWORDS, setdefault_doc},
         {NULL},
     };
 

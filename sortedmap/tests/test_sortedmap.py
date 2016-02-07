@@ -189,3 +189,57 @@ def test_invalidate_iter(itertype):
     it = iter(getattr(m, itertype)())
     m[1] = 2  # change a value without changing the size
     next(it)  # works without raising
+
+
+def test_get(m):
+    ob = object()
+
+    def assertion(key, value):
+        assert m.get(key) == value
+        assert m.get(key, ob) == value
+
+    assertion('a', 1)
+    assertion('b', 2)
+    assertion('c', 3)
+    assert m.get('d') is None
+    assert m.get('d', ob) is ob
+
+
+def test_pop(m):
+    n = m.copy()
+    ob = object()
+
+    def assertion(key, value):
+        assert m.pop(key) == value
+        assert key not in m
+        assert n.pop(key, ob) == value
+        assert key not in n
+
+    assertion('a', 1)
+    assertion('b', 2)
+    assertion('c', 3)
+
+    with pytest.raises(KeyError) as e:
+        m.pop('d')
+    assert e.value.args[0] == 'd'
+
+    assert n.pop('d', ob) is ob
+
+
+def test_popitem(m):
+    assert m.popitem() == ('a', 1)
+    assert m.popitem(first=False) == ('c', 3)
+    assert m.popitem(False) == ('b', 2)
+
+    with pytest.raises(KeyError):
+        m.popitem()
+
+
+def test_setdefault():
+    m = sortedmap()
+
+    assert m.setdefault('a') is None
+    assert m.setdefault('a', 1) is None
+
+    assert m.setdefault('b', 1) == 1
+    assert m.setdefault('b', 2) == 1

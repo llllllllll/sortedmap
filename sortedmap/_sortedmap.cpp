@@ -12,27 +12,23 @@ const char *sortedmap::valview::name = "sortedmap.valview";
 const char *sortedmap::itemview::name = "sortedmap.itemview";
 
 PyObject*
-py_identity(PyObject *ob)
-{
+py_identity(PyObject *ob) {
     Py_INCREF(ob);
     return ob;
 }
 
 bool
-sortedmap::check(PyObject *ob)
-{
+sortedmap::check(PyObject *ob) {
     return PyObject_IsInstance(ob, (PyObject*) &sortedmap::type);
 }
 
 bool
-sortedmap::check_exact(PyObject *ob)
-{
+sortedmap::check_exact(PyObject *ob) {
     return Py_TYPE(ob) == &sortedmap::type;
 }
 
 void
-sortedmap::abstractiter::dealloc(sortedmap::abstractiter::object *self)
-{
+sortedmap::abstractiter::dealloc(sortedmap::abstractiter::object *self) {
     using sortedmap::abstractiter::itertype;
     using ownedtype = OwnedRef<sortedmap::object>;
 
@@ -42,49 +38,42 @@ sortedmap::abstractiter::dealloc(sortedmap::abstractiter::object *self)
 }
 
 PyObject*
-sortedmap::keyiter::elem(sortedmap::abstractiter::itertype it)
-{
+sortedmap::keyiter::elem(sortedmap::abstractiter::itertype it) {
     return std::get<0>(*it).incref();
 }
 
 PyObject*
-sortedmap::valiter::elem(sortedmap::abstractiter::itertype it)
-{
+sortedmap::valiter::elem(sortedmap::abstractiter::itertype it) {
     return std::get<1>(*it).incref();
 }
 
 PyObject*
-sortedmap::itemiter::elem(sortedmap::abstractiter::itertype it)
-{
+sortedmap::itemiter::elem(sortedmap::abstractiter::itertype it) {
     return PyTuple_Pack(2,
                         sortedmap::keyiter::elem(it),
                         sortedmap::valiter::elem(it));
 }
 
 PyObject*
-sortedmap::keyiter::iter(sortedmap::object *self)
-{
+sortedmap::keyiter::iter(sortedmap::object *self) {
     return sortedmap::abstractiter::iter<sortedmap::keyiter::object,
                                          sortedmap::keyiter::type>(self);
 }
 
 PyObject*
-sortedmap::valiter::iter(sortedmap::object *self)
-{
+sortedmap::valiter::iter(sortedmap::object *self) {
     return sortedmap::abstractiter::iter<sortedmap::valiter::object,
                                          sortedmap::valiter::type>(self);
 }
 
 PyObject*
-sortedmap::itemiter::iter(sortedmap::object *self)
-{
+sortedmap::itemiter::iter(sortedmap::object *self) {
     return sortedmap::abstractiter::iter<sortedmap::itemiter::object,
                                          sortedmap::itemiter::type>(self);
 }
 
 PyObject*
-sortedmap::abstractview::repr(sortedmap::abstractview::object *self)
-{
+sortedmap::abstractview::repr(sortedmap::abstractview::object *self) {
     PyObject *aslist;
     PyObject *ret;
 
@@ -97,29 +86,25 @@ sortedmap::abstractview::repr(sortedmap::abstractview::object *self)
 }
 
 PyObject*
-sortedmap::keyview::view(sortedmap::object *self)
-{
+sortedmap::keyview::view(sortedmap::object *self) {
     return sortedmap::abstractview::view<sortedmap::keyview::object,
                                          sortedmap::keyview::type>(self);
 }
 
 PyObject*
-sortedmap::valview::view(sortedmap::object *self)
-{
+sortedmap::valview::view(sortedmap::object *self) {
     return sortedmap::abstractview::view<sortedmap::valview::object,
                                          sortedmap::valview::type>(self);
 }
 
 PyObject*
-sortedmap::itemview::view(sortedmap::object *self)
-{
+sortedmap::itemview::view(sortedmap::object *self) {
     return sortedmap::abstractview::view<sortedmap::itemview::object,
                                          sortedmap::itemview::type>(self);
 }
 
 void
-sortedmap::abstractview::dealloc(sortedmap::abstractview::object *self)
-{
+sortedmap::abstractview::dealloc(sortedmap::abstractview::object *self) {
     using ownedtype = OwnedRef<sortedmap::object>;
 
     self->map.~ownedtype();
@@ -127,8 +112,7 @@ sortedmap::abstractview::dealloc(sortedmap::abstractview::object *self)
 }
 
 static sortedmap::object*
-innernew(PyTypeObject *cls)
-{
+innernew(PyTypeObject *cls) {
     sortedmap::object *self = PyObject_GC_New(sortedmap::object, cls);
 
     if (unlikely(!self)) {
@@ -139,20 +123,17 @@ innernew(PyTypeObject *cls)
 }
 
 sortedmap::object*
-sortedmap::newobject(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
-{
+sortedmap::newobject(PyTypeObject *cls, PyObject *args, PyObject *kwargs) {
     return innernew(cls);
 }
 
 int
-sortedmap::init(sortedmap::object *self, PyObject *args, PyObject *kwargs)
-{
+sortedmap::init(sortedmap::object *self, PyObject *args, PyObject *kwargs) {
     return (sortedmap::update(self, args, kwargs)) ? 0 : -1;
 }
 
 void
-sortedmap::dealloc(sortedmap::object *self)
-{
+sortedmap::dealloc(sortedmap::object *self) {
     using sortedmap::maptype;
 
     sortedmap::clear(self);
@@ -161,8 +142,7 @@ sortedmap::dealloc(sortedmap::object *self)
 }
 
 int
-sortedmap::traverse(sortedmap::object *self, visitproc visit, void *arg)
-{
+sortedmap::traverse(sortedmap::object *self, visitproc visit, void *arg) {
     for (const auto &pair : self->map) {
         Py_VISIT(pair.first);
         Py_VISIT(pair.second);
@@ -171,21 +151,18 @@ sortedmap::traverse(sortedmap::object *self, visitproc visit, void *arg)
 }
 
 void
-sortedmap::clear(sortedmap::object *self)
-{
+sortedmap::clear(sortedmap::object *self) {
     self->map.clear();
 }
 
 PyObject*
-sortedmap::pyclear(sortedmap::object *self)
-{
+sortedmap::pyclear(sortedmap::object *self) {
     sortedmap::clear(self);
     Py_RETURN_NONE;
 }
 
 PyObject *
-sortedmap::richcompare(sortedmap::object *self, PyObject *other, int opid)
-{
+sortedmap::richcompare(sortedmap::object *self, PyObject *other, int opid) {
     if (!(opid == Py_EQ || opid == Py_NE) || !sortedmap::check(other)) {
         Py_RETURN_NOTIMPLEMENTED;
     }
@@ -231,14 +208,12 @@ sortedmap::richcompare(sortedmap::object *self, PyObject *other, int opid)
 }
 
 Py_ssize_t
-sortedmap::len(sortedmap::object *self)
-{
+sortedmap::len(sortedmap::object *self) {
     return self->map.size();
 }
 
 PyObject*
-sortedmap::getitem(sortedmap::object *self, PyObject *key)
-{
+sortedmap::getitem(sortedmap::object *self, PyObject *key) {
     try {
         const auto &it = self->map.find(key);
         if (it == self->map.end()) {
@@ -253,8 +228,7 @@ sortedmap::getitem(sortedmap::object *self, PyObject *key)
 }
 
 PyObject*
-sortedmap::get(sortedmap::object *self, PyObject *key, PyObject *def)
-{
+sortedmap::get(sortedmap::object *self, PyObject *key, PyObject *def) {
     try {
         const auto &it = self->map.find(key);
         if (it == self->map.end()) {
@@ -269,8 +243,7 @@ sortedmap::get(sortedmap::object *self, PyObject *key, PyObject *def)
 }
 
 PyObject*
-sortedmap::pyget(sortedmap::object *self, PyObject *args, PyObject *kwargs)
-{
+sortedmap::pyget(sortedmap::object *self, PyObject *args, PyObject *kwargs) {
     const char *keywords[] = {"key", "default", NULL};
     PyObject *key;
     PyObject *def = NULL;
@@ -292,8 +265,7 @@ sortedmap::pyget(sortedmap::object *self, PyObject *args, PyObject *kwargs)
 }
 
 PyObject*
-sortedmap::pop(sortedmap::object *self, PyObject *key, PyObject *def)
-{
+sortedmap::pop(sortedmap::object *self, PyObject *key, PyObject *def) {
     try {
         PyObject *ret;
 
@@ -319,8 +291,7 @@ sortedmap::pop(sortedmap::object *self, PyObject *key, PyObject *def)
 }
 
 PyObject*
-sortedmap::pypop(sortedmap::object *self, PyObject *args, PyObject *kwargs)
-{
+sortedmap::pypop(sortedmap::object *self, PyObject *args, PyObject *kwargs) {
     const char *keywords[] = {"key", "default", NULL};
     PyObject *key;
     PyObject *def = NULL;
@@ -337,9 +308,64 @@ sortedmap::pypop(sortedmap::object *self, PyObject *args, PyObject *kwargs)
     return sortedmap::pop(self, key, def);
 }
 
+PyObject*
+sortedmap::popitem(sortedmap::object *self, bool front) {
+    sortedmap::maptype::iterator it;
+    bool empty;
+    PyObject *ret;
+
+    if (front) {
+        it = self->map.begin();
+        empty = it == self->map.end();
+    }
+    else {
+        auto rit = self->map.rbegin();
+        empty = rit == self->map.rend();
+        it = --rit.base();
+    }
+
+    if (empty) {
+        PyErr_SetString(PyExc_KeyError, "sortedmap is empty");
+        return NULL;
+    }
+
+    if (!(ret = sortedmap::itemiter::elem(it))) {
+        return NULL;
+    }
+    self->map.erase(it);
+    return ret;
+}
+
+PyObject*
+sortedmap::pypopitem(sortedmap::object *self,
+                     PyObject *args,
+                     PyObject *kwargs) {
+    const char *keywords[] = {"first", NULL};
+    PyObject *pyfirst = NULL;
+    int first;
+
+    if (!PyArg_ParseTupleAndKeywords(args,
+                                     kwargs,
+                                     "|O:popitem",
+                                     (char**) keywords,
+                                     &pyfirst)) {
+        return NULL;
+    }
+
+    if (pyfirst) {
+        first = PyObject_IsTrue(pyfirst);
+        if (first < 0) {
+            return NULL;
+        }
+    }
+    else {
+        first = true;
+    }
+    return sortedmap::popitem(self, first);
+}
+
 static void
-setitem_throws(sortedmap::object *self, PyObject *key, PyObject *value)
-{
+setitem_throws(sortedmap::object *self, PyObject *key, PyObject *value) {
     const auto &pair = self->map.emplace(key, value);
     if (std::get<1>(pair)) {
         ++self->iter_revision;
@@ -350,8 +376,7 @@ setitem_throws(sortedmap::object *self, PyObject *key, PyObject *value)
 }
 
 int
-sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value)
-{
+sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value) {
     try {
         if (!value) {
             self->map.erase(key);
@@ -367,9 +392,43 @@ sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value)
     return 0;
 }
 
+
+PyObject*
+sortedmap::setdefault(sortedmap::object *self, PyObject *key, PyObject *def) {
+    try {
+        return sortedmap::valiter::elem(
+            std::get<0>(self->map.emplace(key, def)));
+    }
+    catch (PythonError &e) {
+        return NULL;
+    }
+}
+
+PyObject*
+sortedmap::pysetdefault(sortedmap::object *self,
+                        PyObject *args,
+                        PyObject *kwargs) {
+    const char *keywords[] = {"key", "default", NULL};
+    PyObject *key;
+    PyObject *def = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args,
+                                     kwargs,
+                                     "O|O:setdefault",
+                                     (char**) keywords,
+                                     &key,
+                                     &def)) {
+        return NULL;
+    }
+
+    if (!def) {
+        def = Py_None;
+    }
+    return sortedmap::setdefault(self, key, def);
+}
+
 int
-sortedmap::contains(sortedmap::object *self, PyObject *key)
-{
+sortedmap::contains(sortedmap::object *self, PyObject *key) {
     try {
         return self->map.find(key) != self->map.end();
     }
@@ -379,8 +438,7 @@ sortedmap::contains(sortedmap::object *self, PyObject *key)
 }
 
 PyObject*
-sortedmap::repr(sortedmap::object *self)
-{
+sortedmap::repr(sortedmap::object *self) {
     PyObject *it;
     PyObject *aslist;
     PyObject *ret;
@@ -399,8 +457,7 @@ sortedmap::repr(sortedmap::object *self)
 }
 
 sortedmap::object*
-sortedmap::copy(sortedmap::object *self)
-{
+sortedmap::copy(sortedmap::object *self) {
     sortedmap::object *ret = innernew(Py_TYPE(self));
 
     if (unlikely(!ret)) {
@@ -412,8 +469,7 @@ sortedmap::copy(sortedmap::object *self)
 }
 
 static bool
-merge(sortedmap::object *self, PyObject *other)
-{
+merge(sortedmap::object *self, PyObject *other) {
     if (sortedmap::check_exact(other)) {
         try {
             for (const auto &pair : ((sortedmap::object*) other)->map) {
@@ -481,8 +537,7 @@ merge(sortedmap::object *self, PyObject *other)
 }
 
 static bool
-merge_from_seq2(sortedmap::object *self, PyObject *seq2)
-{
+merge_from_seq2(sortedmap::object *self, PyObject *seq2) {
     PyObject *it;
     Py_ssize_t n;
     PyObject *item;
@@ -547,8 +602,7 @@ return_:
 }
 
 bool
-sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
-{
+sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs) {
     PyObject *arg = NULL;
 
     if (unlikely(!PyArg_UnpackTuple(args, "update", 0, 1, &arg))) {
@@ -559,10 +613,11 @@ sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
 #if !COMPILING_IN_PY2
         _Py_IDENTIFIER(keys);
 
-        if (_PyObject_HasAttrId(arg, &PyId_keys)) {
+        if (_PyObject_HasAttrId(arg, &PyId_keys))
 #else
-        if (PyObject_HasAttrString(arg, "keys")) {
+        if (PyObject_HasAttrString(arg, "keys"))
 #endif  // !COMPILING_IN_PY2
+        {
 
             if (unlikely(!merge(self, arg))) {
                 return false;
@@ -583,8 +638,7 @@ sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
 }
 
 PyObject*
-sortedmap::pyupdate(sortedmap::object *self, PyObject *args, PyObject *kwargs)
-{
+sortedmap::pyupdate(sortedmap::object *self, PyObject *args, PyObject *kwargs) {
     if (unlikely(!sortedmap::update(self, args, kwargs))) {
         return NULL;
     }
@@ -619,8 +673,7 @@ sortedmap::fromkeys(PyTypeObject *cls, PyObject *seq, PyObject *value) {
 }
 
 sortedmap::object*
-sortedmap::pyfromkeys(PyObject *cls, PyObject *args, PyObject *kwargs)
-{
+sortedmap::pyfromkeys(PyObject *cls, PyObject *args, PyObject *kwargs) {
     const char *keywords[] = {"seq", "value", NULL};
     PyObject *seq;
     PyObject *value = NULL;
