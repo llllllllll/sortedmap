@@ -11,7 +11,7 @@ if 'upload' in sys.argv:
 setup(
     name='sortedmap',
     version='0.1.0',
-    description='A sorted map that does not use hashing.',
+    description='A sorted mapping object',
     author='Joe Jevnik',
     author_email='joejev@gmail.com',
     packages=[
