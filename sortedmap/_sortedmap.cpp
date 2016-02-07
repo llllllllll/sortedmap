@@ -4,19 +4,19 @@
 
 #include "sortedmap.h"
 
-PyObject*
-py_identity(PyObject *ob)
-{
-    Py_INCREF(ob);
-    return ob;
-}
-
 const char *sortedmap::keyiter::name = "sortedmap.keyiter";
 const char *sortedmap::valiter::name = "sortedmap.valiter";
 const char *sortedmap::itemiter::name = "sortedmap.itemiter";
 const char *sortedmap::keyview::name = "sortedmap.keyview";
 const char *sortedmap::valview::name = "sortedmap.valview";
 const char *sortedmap::itemview::name = "sortedmap.itemview";
+
+PyObject*
+py_identity(PyObject *ob)
+{
+    Py_INCREF(ob);
+    return ob;
+}
 
 bool
 sortedmap::check(PyObject *ob)
@@ -131,7 +131,7 @@ innernew(PyTypeObject *cls)
 {
     sortedmap::object *self = PyObject_GC_New(sortedmap::object, cls);
 
-    if (!self) {
+    if (unlikely(!self)) {
         return NULL;
     }
 
@@ -144,11 +144,11 @@ sortedmap::newobject(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
     sortedmap::object *self;
 
-    if (!(self = innernew(cls))) {
+    if (unlikely(!(self = innernew(cls)))) {
         return NULL;
     }
 
-    if (!sortedmap::update(self, args, kwargs)) {
+    if (unlikely(!sortedmap::update(self, args, kwargs))) {
         Py_DECREF(self);
         return NULL;
     }
@@ -225,7 +225,7 @@ sortedmap::richcompare(sortedmap::object *self, PyObject *other, int opid)
             return NULL;
         }
         status = PyObject_RichCompareBool(std::get<1>(pair), other_val, opid);
-        if (status < 0) {
+        if (unlikely(status < 0)) {
             return NULL;
         }
         if (!status) {
@@ -309,7 +309,7 @@ sortedmap::copy(sortedmap::object *self)
 {
     sortedmap::object *ret = innernew(Py_TYPE(self));
 
-    if (!ret) {
+    if (unlikely(!ret)) {
         return NULL;
     }
 
@@ -355,17 +355,17 @@ merge(sortedmap::object *self, PyObject *other)
         PyObject *it;
         PyObject *tmp;
 
-        if (!(keys = PyMapping_Keys(other))) {
+        if (unlikely(!(keys = PyMapping_Keys(other)))) {
             return false;
         }
 
         it = PyObject_GetIter(keys);
         Py_DECREF(keys);
-        if (!it) {
+        if (unlikely(!it)) {
             return false;
         }
         while ((key = PyIter_Next(it))) {
-            if (!(tmp = PyObject_GetItem(other, key))) {
+            if (unlikely(!(tmp = PyObject_GetItem(other, key)))) {
                 Py_DECREF(key);
                 Py_DECREF(it);
                 return false;
@@ -381,6 +381,9 @@ merge(sortedmap::object *self, PyObject *other)
             Py_DECREF(key);
         }
         Py_DECREF(it);
+        if (unlikely(PyErr_Occurred())) {
+            return false;
+        }
     }
     return true;
 }
@@ -393,24 +396,24 @@ merge_from_seq2(sortedmap::object *self, PyObject *seq2)
     PyObject *item;
     PyObject *fast;
 
-    if (!(it = PyObject_GetIter(seq2))) {
+    if (unlikely(!(it = PyObject_GetIter(seq2)))) {
         return false;
     }
 
-    for (n = 0; ; ++n) {
+    for (n = 0;;++n) {
         PyObject *key, *value;
         Py_ssize_t len;
 
         fast = NULL;
-        if (!(item = PyIter_Next(it))) {
-            if (PyErr_Occurred()) {
+        if (unlikely(!(item = PyIter_Next(it)))) {
+            if (unlikely(PyErr_Occurred())) {
                 goto fail;
             }
             break;
         }
 
         /* Convert item to sequence, and verify length 2. */
-        if (!(fast = PySequence_Fast(item, ""))) {
+        if (unlikely(!(fast = PySequence_Fast(item, "")))) {
             if (PyErr_ExceptionMatches(PyExc_TypeError))
                 PyErr_Format(PyExc_TypeError,
                              "cannot convert sortedmap update "
@@ -419,7 +422,7 @@ merge_from_seq2(sortedmap::object *self, PyObject *seq2)
             goto fail;
         }
         len = PySequence_Fast_GET_SIZE(fast);
-        if (len != 2) {
+        if (unlikely(len != 2)) {
             PyErr_Format(PyExc_ValueError,
                          "sortedmap update sequence element #%zd "
                          "has length %zd; 2 is required",
@@ -451,31 +454,30 @@ return_:
     return !Py_SAFE_DOWNCAST(n, Py_ssize_t, int);
 }
 
-
 bool
 sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
 {
     PyObject *arg = NULL;
 
-    if (!PyArg_UnpackTuple(args, "update", 0, 1, &arg)) {
+    if (unlikely(!PyArg_UnpackTuple(args, "update", 0, 1, &arg))) {
         return false;
     }
 
     else if (arg) {
         if (_PyObject_HasAttrId(arg, &PyId_keys)) {
-            if (!merge(self, arg)) {
+            if (unlikely(!merge(self, arg))) {
                 return false;
             }
         }
         else {
-            if (!merge_from_seq2(self, arg)) {
+            if (unlikely(!merge_from_seq2(self, arg))) {
                 return false;
             }
         }
     }
     if (kwargs) {
         if (PyArg_ValidateKeywordArguments(kwargs)) {
-            if (!merge(self, kwargs)) {
+            if (unlikely(!merge(self, kwargs))) {
                 return false;
             }
         }
@@ -486,12 +488,11 @@ sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
 PyObject*
 sortedmap::pyupdate(sortedmap::object *self, PyObject *args, PyObject *kwargs)
 {
-    if (!sortedmap::update(self, args, kwargs)) {
+    if (unlikely(!sortedmap::update(self, args, kwargs))) {
         return NULL;
     }
     Py_RETURN_NONE;
 }
-
 
 static struct PyModuleDef _sortedmap_module = {
     PyModuleDef_HEAD_INIT,
