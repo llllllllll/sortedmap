@@ -4,6 +4,15 @@
 #include <map>
 
 #include <Python.h>
+#include <structmember.h>
+
+#define COMPILING_IN_PY2 (PY_VERSION_HEX <= 0x03000000)
+
+#ifndef Py_RETURN_NOTIMPLEMENTED
+#define Py_RETURN_NOTIMPLEMENTED                \
+    Py_INCREF(Py_NotImplemented);               \
+    return Py_NotImplemented
+#endif  // Py_RETURN_NOTIMPLEMENTED
 
 #define likely(condition) __builtin_expect(!!(condition), 1)
 #define unlikely(condition) __builtin_expect(!!(condition), 0)
@@ -11,10 +20,8 @@
 class PythonError : std::exception {};
 
 template<typename T>
-class OwnedRef final{
+class OwnedRef final {
 private:
-    T *ob;  // The underlying object we own a reference to.
-
     template<int opid>
     bool richcompare(const OwnedRef<T> &b) const {
         int result = PyObject_RichCompareBool(ob, b, opid);
@@ -25,6 +32,8 @@ private:
     }
 
 public:
+    T *ob;
+
     OwnedRef<T>() {
         ob = NULL;
     }
@@ -91,6 +100,8 @@ namespace sortedmap {
     struct object {
         PyObject_HEAD
         maptype map;
+        // Keep track of operations that may invalidate any iterators.
+        unsigned long iter_revision;
     };
 
     bool check(PyObject*);
@@ -114,6 +125,10 @@ namespace sortedmap {
     bool update(object*, PyObject*, PyObject*);
     PyObject *pyupdate(object*, PyObject*, PyObject*);
 
+    PyDoc_STRVAR(iter_revision_doc,
+                 "An internal counter used to invalidate iterators after"
+                 " the map changes size.");
+
     namespace abstractiter {
         using itertype = decltype(std::declval<maptype>().cbegin());
         typedef PyObject *extract_element(itertype);
@@ -123,6 +138,8 @@ namespace sortedmap {
             itertype iter;
             decltype(std::declval<maptype>().cend()) end;
             OwnedRef<sortedmap::object> map;
+            // the revision of the map when this iter was created.
+            unsigned long iter_revision;
         };
 
         void dealloc(object*);
@@ -133,6 +150,11 @@ namespace sortedmap {
         {
             PyObject *ret;
 
+            if (unlikely(self->iter_revision != self->map.ob->iter_revision)) {
+                PyErr_SetString(PyExc_RuntimeError,
+                                "sortedmap changed size during iteration");
+                return NULL;
+            }
             if (unlikely(self->iter == self->end)) {
                 return NULL;
             }
@@ -154,8 +176,18 @@ namespace sortedmap {
             ret->iter = std::move(self->map.cbegin());
             ret->end = std::move(self->map.cend());
             new(&ret->map) OwnedRef<sortedmap::object>(self);
+            ret->iter_revision = self->iter_revision;
             return (PyObject*) ret;
         }
+
+        PyMemberDef members[] = {
+            {(char*) "_iter_revision",
+             T_ULONG,
+             offsetof(object, iter_revision),
+             READONLY,
+             iter_revision_doc},
+            {NULL},
+        };
 
         template<const char *&name, extract_element elem>
         PyTypeObject type = {
@@ -186,6 +218,8 @@ namespace sortedmap {
             0,                                          // tp_weaklistoffset
             (getiterfunc) py_identity,                  // tp_iter
             (iternextfunc) next<elem>,                  // tp_iternext
+            0,                                          // tp_methods
+            members,                                    // tp_members
         };
     }
 
@@ -436,6 +470,15 @@ namespace sortedmap {
         {NULL},
     };
 
+    PyMemberDef members[] = {
+        {(char*) "_iter_revision",
+         T_ULONG,
+         offsetof(object, iter_revision),
+         READONLY,
+         iter_revision_doc},
+        {NULL},
+    };
+
     PyDoc_STRVAR(sortedmap_doc,
                  "A sorted mapping that does not use hashing.\n"
                  "\n"
@@ -476,7 +519,7 @@ namespace sortedmap {
         (getiterfunc) keyiter::iter,                // tp_iter
         0,                                          // tp_iternext
         methods,                                    // tp_methods
-        0,                                          // tp_members
+        members,                                    // tp_members
         0,                                          // tp_getset
         0,                                          // tp_base
         0,                                          // tp_dict

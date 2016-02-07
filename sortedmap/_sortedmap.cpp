@@ -138,7 +138,6 @@ innernew(PyTypeObject *cls)
     return new(self) sortedmap::object;
 }
 
-
 sortedmap::object*
 sortedmap::newobject(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
@@ -252,19 +251,30 @@ sortedmap::getitem(sortedmap::object *self, PyObject *key)
     }
 }
 
+static void
+setitem_throws(sortedmap::object *self, PyObject *key, PyObject *value)
+{
+    OwnedRef<PyObject> &val = self->map[key];
+    if (!val.ob) {
+        self->iter_revision += 1;
+    }
+    val = std::move(OwnedRef<PyObject>(value));
+}
+
 int
 sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value)
 {
-    if (!value) {
-        self->map.erase(key);
+    try {
+        if (!value) {
+            self->map.erase(key);
+            self->iter_revision += 1;
+        }
+        else {
+            setitem_throws(self, key, value);
+        }
     }
-    else {
-        try {
-            self->map[key] = value;
-        }
-        catch (PythonError &e) {
-            return -1;
-        }
+    catch (PythonError &e) {
+        return -1;
     }
     return 0;
 }
@@ -313,15 +323,13 @@ sortedmap::copy(sortedmap::object *self)
     return ret;
 }
 
-_Py_IDENTIFIER(keys);
-
 static bool
 merge(sortedmap::object *self, PyObject *other)
 {
     if (sortedmap::check_exact(other)) {
         try {
             for (const auto &pair : ((sortedmap::object*) other)->map) {
-                self->map[std::get<0>(pair)] = std::get<1>(pair);
+                setitem_throws(self, std::get<0>(pair), std::get<1>(pair));
             }
         }
         catch (PythonError &e) {
@@ -339,7 +347,7 @@ merge(sortedmap::object *self, PyObject *other)
 
         while (PyDict_Next(other, &pos, &key, &value)) {
             try {
-                self->map[key] = value;
+                setitem_throws(self, key, value);
             }
             catch (PythonError &e) {
                 return false;
@@ -367,7 +375,7 @@ merge(sortedmap::object *self, PyObject *other)
                 return false;
             }
             try {
-                self->map[key] = tmp;
+                setitem_throws(self, key, tmp);
             }
             catch (PythonError &e) {
                 Py_DECREF(key);
@@ -408,7 +416,7 @@ merge_from_seq2(sortedmap::object *self, PyObject *seq2)
             break;
         }
 
-        /* Convert item to sequence, and verify length 2. */
+        // convert item to sequence, and verify length 2
         if (unlikely(!(fast = PySequence_Fast(item, "")))) {
             if (PyErr_ExceptionMatches(PyExc_TypeError))
                 PyErr_Format(PyExc_TypeError,
@@ -426,11 +434,11 @@ merge_from_seq2(sortedmap::object *self, PyObject *seq2)
             goto fail;
         }
 
-        /* Update/merge with this (key, value) pair. */
+        // update with this (key, value) pair
         key = PySequence_Fast_GET_ITEM(fast, 0);
         value = PySequence_Fast_GET_ITEM(fast, 1);
         try{
-            self->map[key] = value;
+            setitem_throws(self, key, value);
         }
         catch (PythonError &e) {
             goto fail;
@@ -460,7 +468,14 @@ sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
     }
 
     else if (arg) {
+#if !COMPILING_IN_PY2
+        _Py_IDENTIFIER(keys);
+
         if (_PyObject_HasAttrId(arg, &PyId_keys)) {
+#else
+        if (PyObject_HasAttrString(arg, "keys")) {
+#endif  // !COMPILING_IN_PY2
+
             if (unlikely(!merge(self, arg))) {
                 return false;
             }
@@ -472,10 +487,8 @@ sortedmap::update(sortedmap::object *self, PyObject *args, PyObject *kwargs)
         }
     }
     if (kwargs) {
-        if (PyArg_ValidateKeywordArguments(kwargs)) {
-            if (unlikely(!merge(self, kwargs))) {
-                return false;
-            }
+        if (unlikely(!merge(self, kwargs))) {
+            return false;
         }
     }
     return true;
@@ -490,16 +503,28 @@ sortedmap::pyupdate(sortedmap::object *self, PyObject *args, PyObject *kwargs)
     Py_RETURN_NONE;
 }
 
+#define MODULE_NAME "sortedmap._sortedmap"
+PyDoc_STRVAR(module_doc,
+             "A sorted map that does not use hashing.");
+
+#if !COMPILING_IN_PY2
 static struct PyModuleDef _sortedmap_module = {
     PyModuleDef_HEAD_INIT,
-    "sortedmap._sortedmap",
-    "",
+    MODULE_NAME,
+    module_doc,
     -1,
 };
+#endif  // !COMPILING_IN_PY2
 
 extern "C" {
 PyMODINIT_FUNC
+#if !COMPILING_IN_PY2
+#define ERROR_RETURN NULL
 PyInit__sortedmap(void)
+#else
+#define ERROR_RETURN
+init_sortedmap(void)
+#endif  // !COMPILING_IN_PY2
 {
     std::vector<PyTypeObject*> ts = {&sortedmap::type,
                                      &sortedmap::keyiter::type,
@@ -512,19 +537,25 @@ PyInit__sortedmap(void)
 
     for (const auto &t : ts) {
         if (PyType_Ready(t)) {
-            return NULL;
+            return ERROR_RETURN;
         }
     }
 
+#if !COMPILING_IN_PY2
     if (!(m = PyModule_Create(&_sortedmap_module))) {
-        return NULL;
+#else
+    if (!(m = Py_InitModule3(MODULE_NAME, NULL, module_doc))) {
+#endif  // !COMPILING_IN_PY2
+        return ERROR_RETURN;
     }
 
     if (PyModule_AddObject(m, "sortedmap", (PyObject*) &sortedmap::type)) {
         Py_DECREF(m);
-        return NULL;
+        return ERROR_RETURN;
     }
 
+#if !COMPILING_IN_PY2
     return m;
+#endif  // !COMPILING_IN_PY2
 }
 }

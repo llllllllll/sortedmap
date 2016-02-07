@@ -1,4 +1,6 @@
-from collections.abc import MutableMapping
+from collections import MutableMapping
+
+import pytest
 
 from sortedmap import sortedmap
 
@@ -113,3 +115,16 @@ def test_items():
     assert view == (('a', 1), ('b', 2), ('c', 3), ('d', 4))
     # check iter order
     assert list(m.items()) == [('a', 1), ('b', 2), ('c', 3), ('d', 4)]
+
+
+@pytest.mark.parametrize('itertype', ('keys', 'values', 'items'))
+def test_invalidate_iter(itertype):
+    m = sortedmap()
+    it = iter(getattr(m, itertype)())
+    m[1] = 1  # update the size
+    with pytest.raises(RuntimeError):
+        next(it)  # advance the iterator
+
+    it = iter(getattr(m, itertype)())
+    m[1] = 2  # change a value without changing the size
+    next(it)  # works without raising

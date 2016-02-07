@@ -23,7 +23,8 @@ setup(
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: GNU General Public License v2 (GPLv2)',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3 :: Only',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 2',
         'Programming Language :: Python :: Implementation :: CPython',
         'Operating System :: POSIX',
     ],
@@ -33,6 +34,7 @@ setup(
             'sortedmap._sortedmap',
             ['sortedmap/_sortedmap.cpp'],
             include_dirs=['sortedmap/include'],
+            depends=['sortedmap/include/sortedmap.h'],
             extra_compile_args=[
                 '-Wall',
                 '-Wextra',
@@ -43,4 +45,7 @@ setup(
             language='c++',
         ),
     ],
+    extras_require={
+        'test': ['pytest==2.8.7', 'pytest-pep8>=1.0.6'],
+    },
 )

@@ -1,4 +1,4 @@
-from collections.abc import MutableMapping
+from collections import MutableMapping
 
 from ._sortedmap import sortedmap
 
