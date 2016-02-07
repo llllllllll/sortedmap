@@ -206,7 +206,7 @@ sortedmap::richcompare(sortedmap::object *self, PyObject *other, int opid)
 
     for (const auto &pair : self->map) {
         try{
-            other_val = asmap->map.at(std::get<0>(pair));
+            other_val = std::move(asmap->map.at(std::get<0>(pair)));
         }
         catch (std::out_of_range &e) {
             if (opid == Py_EQ) {

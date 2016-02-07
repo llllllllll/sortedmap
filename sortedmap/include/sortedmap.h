@@ -31,6 +31,13 @@ private:
         return result;
     }
 
+    void construct(T *ob) {
+        if (likely(ob)) {
+            Py_INCREF(ob);
+        }
+        this->ob = ob;
+    }
+
 public:
     T *ob;
 
@@ -39,13 +46,16 @@ public:
     }
 
     OwnedRef<T>(T *ob) {
-        if (likely(ob)) {
-            Py_INCREF(ob);
-        }
-        this->ob = ob;
+        construct(ob);
     }
 
     OwnedRef<T>(const OwnedRef<T> &ref) : OwnedRef<T>(ref.ob) {}
+
+
+    OwnedRef<T> &operator=(OwnedRef<T> &&ref) {
+        construct(ref.ob);
+        return *this;
+    }
 
     ~OwnedRef<T>() {
         if (likely(ob)) {
@@ -58,28 +68,28 @@ public:
         return ob;
     }
 
-    bool operator<(const OwnedRef<T> &b) const {
-        return richcompare<Py_LT>(b);
+    bool operator<(const OwnedRef<T> &ref) const {
+        return richcompare<Py_LT>(ref);
     }
 
-    bool operator<=(const OwnedRef<T> &b) const {
-        return richcompare<Py_LE>(b);
+    bool operator<=(const OwnedRef<T> &ref) const {
+        return richcompare<Py_LE>(ref);
     }
 
-    bool operator>(const OwnedRef<T> &b) const {
-        return richcompare<Py_GT>(b);
+    bool operator>(const OwnedRef<T> &ref) const {
+        return richcompare<Py_GT>(ref);
     }
 
-    bool operator>=(const OwnedRef<T> &b) const {
-        return richcompare<Py_GE>(b);
+    bool operator>=(const OwnedRef<T> &ref) const {
+        return richcompare<Py_GE>(ref);
     }
 
-    bool operator==(const OwnedRef<T> &b) const {
-        return richcompare<Py_EQ>(b);
+    bool operator==(const OwnedRef<T> &ref) const {
+        return richcompare<Py_EQ>(ref);
     }
 
-    bool operator!=(const OwnedRef<T> &b) const {
-        return richcompare<Py_NE>(b);
+    bool operator!=(const OwnedRef<T> &ref) const {
+        return richcompare<Py_NE>(ref);
     }
 
     constexpr operator T*() const {
