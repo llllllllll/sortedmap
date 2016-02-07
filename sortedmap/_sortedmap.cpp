@@ -332,6 +332,7 @@ sortedmap::popitem(sortedmap::object *self, bool front) {
     if (!(ret = sortedmap::itemiter::elem(it))) {
         return NULL;
     }
+    ++self->iter_revision;
     self->map.erase(it);
     return ret;
 }
@@ -395,9 +396,14 @@ sortedmap::setitem(sortedmap::object *self, PyObject *key, PyObject *value) {
 
 PyObject*
 sortedmap::setdefault(sortedmap::object *self, PyObject *key, PyObject *def) {
+    PyObject *ret;
     try {
-        return sortedmap::valiter::elem(
+        ret = sortedmap::valiter::elem(
             std::get<0>(self->map.emplace(key, def)));
+        if (ret != def) {
+            ++self->iter_revision;
+        }
+        return ret;
     }
     catch (PythonError &e) {
         return NULL;
