@@ -51,7 +51,6 @@ public:
 
     OwnedRef<T>(const OwnedRef<T> &ref) : OwnedRef<T>(ref.ob) {}
 
-
     OwnedRef<T> &operator=(OwnedRef<T> &&ref) {
         construct(ref.ob);
         return *this;
