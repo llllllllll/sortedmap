@@ -8,6 +8,18 @@ if 'upload' in sys.argv:
     with open('README.rst') as f:
         long_description = f.read()
 
+
+classifiers = [
+    'Development Status :: 3 - Alpha',
+    'Intended Audience :: Developers',
+    'License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)'
+    'Natural Language :: English',
+    'Programming Language :: C++',
+    'Programming Language :: Python :: 2',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: Implementation :: CPython',
+],
+
 setup(
     name='sortedmap',
     version='0.1.0',
@@ -18,16 +30,8 @@ setup(
         'sortedmap',
     ],
     long_description=long_description,
-    license='GPL-2',
-    classifiers=[
-        'Development Status :: 3 - Alpha',
-        'License :: OSI Approved :: GNU General Public License v2 (GPLv2)',
-        'Natural Language :: English',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: Implementation :: CPython',
-        'Operating System :: POSIX',
-    ],
+    license='LGPLv2',
+    classifiers=classifiers,
     url='https://github.com/llllllllll/sortedmap',
     ext_modules=[
         Extension(
