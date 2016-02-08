@@ -22,6 +22,9 @@ differences:
 
      sortedmap[keyfunc](...)
 
+   This can be retrieved later with the ``keyfunc`` attribute of ``sortedmap``
+   objects.
+
 
 
 
