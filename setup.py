@@ -12,13 +12,13 @@ if 'upload' in sys.argv:
 classifiers = [
     'Development Status :: 3 - Alpha',
     'Intended Audience :: Developers',
-    'License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)'
+    'License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)',
     'Natural Language :: English',
     'Programming Language :: C++',
     'Programming Language :: Python :: 2',
     'Programming Language :: Python :: 3',
     'Programming Language :: Python :: Implementation :: CPython',
-],
+]
 
 setup(
     name='sortedmap',
