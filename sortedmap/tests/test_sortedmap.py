@@ -306,3 +306,37 @@ def test_keyfunc_partial_repr():
 def test_keyfunc(keyfunc_m):
     assert keyfunc_m.keys() == ['c', 'bc', 'abc']
     assert dict(keyfunc_m) == {'abc': 1, 'bc': 2, 'c': 3}
+
+
+def test_keyview_setlike(m):
+    keys = m.keys()
+    assert keys - {'a'} == {'b', 'c'}
+    assert keys <= {'a', 'b', 'c'}
+    assert keys < {'a', 'b', 'c', 'd'}
+    assert keys > {'a', 'b'}
+    assert keys | {'d', 'e'} == {'a', 'b', 'c', 'd', 'e'}
+    assert keys & {'b', 'c', 'd', 'e'} == {'b', 'c'}
+    assert keys ^ {'a', 'b', 'd'} == {'c', 'd'}
+    assert keys  # bool
+    assert not sortedmap().keys()
+
+
+def test_itemview_setlike(m):
+    items = m.items()
+    assert items - {('a', 1)} == {('b', 2), ('c', 3)}
+    assert items <= {('a', 1), ('b', 2), ('c', 3)}
+    assert items < {('a', 1), ('b', 2), ('c', 3), 'd'}
+    assert items > {('a', 1), ('b', 2)}
+    assert items | {'d', 'e'} == {('a', 1), ('b', 2), ('c', 3), 'd', 'e'}
+    assert items & {('b', 2), ('c', 3), 'd', 'e'} == {('b', 2), ('c', 3)}
+    assert items ^ {('a', 1), ('b', 2), ('d', 4)} == {('c', 3), ('d', 4)}
+    assert items  # bool
+    assert not sortedmap().items()
+
+
+def test_values_listlike(m):
+    values = m.values()
+    assert values + [4, 5, 6] == [1, 2, 3, 4, 5, 6]
+    assert values * 2 == [1, 2, 3, 1, 2, 3]
+    assert values  # bool
+    assert not sortedmap().values()
