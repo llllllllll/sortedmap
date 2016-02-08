@@ -17,6 +17,76 @@ py_identity(PyObject *ob) {
     return ob;
 }
 
+PyObject *
+sortedmap::Comparator::call(PyObject *ob) {
+    PyObject *ret;
+
+    PyTuple_SET_ITEM(argtuple, 0, ob);
+    ret = PyObject_Call(keyfunc, argtuple, NULL);
+    if (Py_REFCNT(argtuple) != 1) {
+        Py_INCREF(ob);
+        Py_DECREF(argtuple);
+        if (unlikely(!(argtuple = PyTuple_New(1)))) {
+            throw PythonError();
+        }
+    }
+    else {
+        PyTuple_SET_ITEM(argtuple, 0, NULL);
+    }
+    return ret;
+}
+
+sortedmap::Comparator::Comparator() {
+    this->keyfunc = NULL;
+    argtuple = NULL;
+}
+
+sortedmap::Comparator::Comparator(PyObject *keyfunc) {
+    this->keyfunc = keyfunc;
+    Py_XINCREF(keyfunc);
+    argtuple = NULL;
+}
+
+sortedmap::Comparator::~Comparator() {
+    Py_XDECREF(keyfunc);
+    Py_XDECREF(argtuple);
+}
+
+sortedmap::Comparator&
+sortedmap::Comparator::operator=(const Comparator &other) {
+    keyfunc = other.keyfunc;
+    Py_XINCREF(keyfunc);
+    argtuple = NULL;
+    return *this;
+}
+
+bool
+sortedmap::Comparator::operator()(const OwnedRef<PyObject> &a,
+                                  const OwnedRef<PyObject> &b){
+    if (!keyfunc) {
+        return a < b;
+    }
+
+    if (unlikely(!argtuple)) {
+        if (!(argtuple = PyTuple_New(1))) {
+            throw PythonError();
+        }
+    }
+
+    OwnedRef<PyObject> a_ob;
+    OwnedRef<PyObject> b_ob;
+    int status;
+
+    if (unlikely(!(a_ob = call(a)) || !(b_ob = call(b)))) {
+        throw PythonError();
+    }
+    status = PyObject_RichCompareBool(a_ob, b_ob, Py_LT);
+    if (unlikely(status < 0)) {
+        throw PythonError();
+    }
+    return status;
+}
+
 bool
 sortedmap::check(PyObject *ob) {
     return PyObject_IsInstance(ob, (PyObject*) &sortedmap::type);
@@ -112,19 +182,23 @@ sortedmap::abstractview::dealloc(sortedmap::abstractview::object *self) {
 }
 
 static sortedmap::object*
-innernew(PyTypeObject *cls) {
+innernew(PyTypeObject *cls, PyObject *keyfunc) {
     sortedmap::object *self = PyObject_GC_New(sortedmap::object, cls);
+    ;
 
     if (unlikely(!self)) {
         return NULL;
     }
 
-    return new(self) sortedmap::object;
+    self = new(self) sortedmap::object;
+    Py_XINCREF(keyfunc);
+    self->map = std::move(sortedmap::maptype(sortedmap::Comparator(keyfunc)));
+    return self;
 }
 
 sortedmap::object*
 sortedmap::newobject(PyTypeObject *cls, PyObject *args, PyObject *kwargs) {
-    return innernew(cls);
+    return innernew(cls, NULL);
 }
 
 int
@@ -464,7 +538,8 @@ sortedmap::repr(sortedmap::object *self) {
 
 sortedmap::object*
 sortedmap::copy(sortedmap::object *self) {
-    sortedmap::object *ret = innernew(Py_TYPE(self));
+    sortedmap::object *ret = innernew(Py_TYPE(self),
+                                      self->map.key_comp().keyfunc);
 
     if (unlikely(!ret)) {
         return NULL;
@@ -666,13 +741,13 @@ sortedmap::fromkeys(PyTypeObject *cls, PyObject *seq, PyObject *value) {
         return NULL;
     }
 
-    if (unlikely(!(self = innernew(cls)))) {
+    if (unlikely(!(self = innernew(cls, NULL)))) {
         Py_DECREF(it);
         return NULL;
     }
 
     while ((key = PyIter_Next(it))) {
-        self->map[key] = value;
+        self->map.emplace(key, value);
         Py_DECREF(key);
     }
     Py_DECREF(it);
@@ -705,6 +780,90 @@ sortedmap::pyfromkeys(PyObject *cls, PyObject *args, PyObject *kwargs) {
     return sortedmap::fromkeys((PyTypeObject*) cls, seq, value);
 }
 
+PyObject*
+sortedmap::get_iter_revision(object *self) {
+    return PyLong_FromUnsignedLong(self->iter_revision);
+}
+
+PyObject*
+sortedmap::get_keyfunc(object *self) {
+    PyObject *ret =self->map.key_comp().keyfunc;
+    if (!ret) {
+        ret = Py_None;
+    }
+    Py_INCREF(ret);
+    return ret;
+}
+
+void
+sortedmap::meta::partial::dealloc(sortedmap::meta::partial::object *self) {
+    using ownedtype = OwnedRef<PyObject>;
+    using ownedcls = OwnedRef<PyTypeObject>;
+
+    self->cls.~ownedcls();
+    self->keyfunc.~ownedtype();
+    PyObject_GC_Del(self);
+}
+
+sortedmap::object*
+sortedmap::meta::partial::call(sortedmap::meta::partial::object *self,
+                               PyObject *args,
+                               PyObject *kwargs) {
+    sortedmap::object *m;
+
+    if (!(m = innernew(self->cls, self->keyfunc.ob))) {
+        return NULL;
+    }
+    if (sortedmap::init(m, args, kwargs)) {
+        Py_DECREF(m);
+        return NULL;
+    }
+    return m;
+}
+
+PyObject*
+sortedmap::meta::partial::repr(sortedmap::meta::partial::object *self) {
+    return PyUnicode_FromFormat("%s[%R]",
+                                self->cls.ob->tp_name,
+                                self->keyfunc.ob);
+}
+
+int
+sortedmap::meta::partial::traverse(sortedmap::meta::partial::object *self,
+                                   visitproc visit,
+                                   void *arg) {
+    Py_VISIT((PyObject*) self->cls.ob);
+    Py_VISIT(self->keyfunc);
+    return 0;
+}
+
+void
+sortedmap::meta::partial::clear(sortedmap::meta::partial::object *self) {
+    using ownedtype = OwnedRef<PyObject>;
+    using ownedcls = OwnedRef<PyTypeObject>;
+
+    self->cls.~ownedcls();
+    self->keyfunc.~ownedtype();
+}
+
+sortedmap::meta::partial::object*
+sortedmap::meta::getitem(PyObject *cls, PyObject *keyfunc) {
+    sortedmap::meta::partial::object *partial;
+
+    if (!PyType_Check(cls)) {
+        PyErr_Format(PyExc_TypeError, "%R is not a type object", cls);
+        return NULL;
+    }
+
+    if (!(partial = PyObject_GC_New(sortedmap::meta::partial::object,
+                                    &sortedmap::meta::partial::type))) {
+        return NULL;
+    }
+    new(partial) sortedmap::meta::partial::object;
+    partial->cls = std::move((PyTypeObject*) cls);
+    partial->keyfunc = std::move(keyfunc);
+    return partial;
+}
 
 #define MODULE_NAME "sortedmap._sortedmap"
 PyDoc_STRVAR(module_doc,
@@ -729,13 +888,15 @@ PyInit__sortedmap(void)
 init_sortedmap(void)
 #endif  // !COMPILING_IN_PY2
 {
-    std::vector<PyTypeObject*> ts = {&sortedmap::type,
+    std::vector<PyTypeObject*> ts = {&sortedmap::meta::partial::type,
+                                     &sortedmap::meta::type,
                                      &sortedmap::keyiter::type,
                                      &sortedmap::valiter::type,
                                      &sortedmap::itemiter::type,
                                      &sortedmap::keyview::type,
                                      &sortedmap::valview::type,
-                                     &sortedmap::itemiter::type};
+                                     &sortedmap::itemiter::type,
+                                     &sortedmap::type};
     PyObject *m;
 
     for (const auto &t : ts) {

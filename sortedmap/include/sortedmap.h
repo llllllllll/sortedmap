@@ -99,7 +99,26 @@ public:
 PyObject *py_identity(PyObject*);
 
 namespace sortedmap {
-    using maptype = std::map<OwnedRef<PyObject>, OwnedRef<PyObject>>;
+    class Comparator {
+    private:
+        PyObject *argtuple;  // not using ownedref for copying issues
+
+        PyObject *call(PyObject*);
+
+    public:
+        PyObject* keyfunc;  // not using ownedref for copying issues
+
+        Comparator();
+        Comparator(PyObject*);
+        ~Comparator();
+        Comparator &operator=(const Comparator&);
+        bool operator()(const OwnedRef<PyObject>&,
+                        const OwnedRef<PyObject>&);
+    };
+
+    using maptype = std::map<OwnedRef<PyObject>,
+                             OwnedRef<PyObject>,
+                             Comparator>;
 
     struct object {
         PyObject_HEAD
@@ -140,8 +159,8 @@ namespace sortedmap {
     object *pyfromkeys(PyObject*, PyObject*, PyObject*);
 
     PyDoc_STRVAR(iter_revision_doc,
-                 "An internal counter used to invalidate iterators after"
-                 " the map changes size.");
+                 "An internal counter used to invalidate iterators after\n"
+                 " the map changes size.\n");
 
     namespace abstractiter {
         using itertype = maptype::const_iterator;
@@ -437,6 +456,97 @@ namespace sortedmap {
         (objobjargproc) setitem,                    // mp_ass_subscript
     };
 
+    namespace meta {
+        namespace partial {
+            struct object {
+                PyObject_HEAD
+                OwnedRef<PyTypeObject> cls;
+                OwnedRef<PyObject> keyfunc;
+            };
+
+            void dealloc(object*);
+            sortedmap::object *call(object*, PyObject *args, PyObject *kwargs);
+            PyObject *repr(object*);
+            int traverse(object*, visitproc, void*);
+            void clear(object*);
+
+            PyDoc_STRVAR(sortedmapmeta_partial_doc,
+                         "Partial for the sortedmap class that applies\n"
+                         "a key function to new instances.\n");
+
+            PyTypeObject type = {
+                PyVarObject_HEAD_INIT(&PyType_Type, 0)
+                "sortedmap.sortedmapmeta_partial",          // tp_name
+                sizeof(object),                             // tp_basicsize
+                0,                                          // tp_itemsize
+                (destructor) dealloc,                       // tp_dealloc
+                0,                                          // tp_print
+                0,                                          // tp_getattr
+                0,                                          // tp_setattr
+                0,                                          // tp_reserved
+                (reprfunc) repr,                            // tp_repr
+                0,                                          // tp_as_number
+                0,                                          // tp_as_sequence
+                0,                                          // tp_as_mapping
+                0,                                          // tp_hash
+                (ternaryfunc) call,                         // tp_call
+                (reprfunc) repr,                            // tp_str
+                0,                                          // tp_getattro
+                0,                                          // tp_setattro
+                0,                                          // tp_as_buffer
+                Py_TPFLAGS_DEFAULT,                         // tp_flags
+                sortedmapmeta_partial_doc,                  // tp_doc
+                (traverseproc) traverse,                    // tp_traverse
+                (inquiry) clear,                            // tp_clear
+            };
+        }
+
+        partial::object *getitem(PyObject*, PyObject*);
+
+        PyMappingMethods as_mapping = {
+            0,                                          // mp_length
+            (binaryfunc) getitem,                       // mp_subscript
+            0,                                          // mp_ass_subscript
+        };
+
+        PyDoc_STRVAR(sortedmapmeta_doc,
+                     "Metaclass that provides __getitem__ for key functions\n");
+
+        PyTypeObject type = {
+            PyVarObject_HEAD_INIT(&PyType_Type, 0)
+            "sortedmap.sortedmapmeta",                  // tp_name
+            sizeof(PyType_Type.tp_basicsize),           // tp_basicsize
+            0,                                          // tp_itemsize
+            0,                                          // tp_dealloc
+            0,                                          // tp_print
+            0,                                          // tp_getattr
+            0,                                          // tp_setattr
+            0,                                          // tp_reserved
+            0,                                          // tp_repr
+            0,                                          // tp_as_number
+            0,                                          // tp_as_sequence
+            &as_mapping,                                // tp_as_mapping
+            0,                                          // tp_hash
+            0,                                          // tp_call
+            0,                                          // tp_str
+            0,                                          // tp_getattro
+            0,                                          // tp_setattro
+            0,                                          // tp_as_buffer
+            Py_TPFLAGS_DEFAULT,                         // tp_flags
+            sortedmapmeta_doc,                          // tp_doc
+            0,                                          // tp_traverse
+            0,                                          // tp_clear
+            0,                                          // tp_richcompare
+            0,                                          // tp_weaklistoffset
+            0,                                          // tp_iter
+            0,                                          // tp_iternext
+            0,                                          // tp_methods
+            0,                                          // tp_members
+            0,                                          // tp_getset
+            &PyType_Type,                               // tp_base
+        };
+    }
+
     PyDoc_STRVAR(keys_doc,
                  "Returns\n"
                  "-------\n"
@@ -574,12 +684,25 @@ namespace sortedmap {
         {NULL},
     };
 
-    PyMemberDef members[] = {
+    PyObject *get_iter_revision(object*);
+    PyObject *get_keyfunc(object*);
+
+    PyDoc_STRVAR(keyfunc_doc,
+                 "The key function used for comparing keys.\n"
+                 "If no function was provided this returns None.\n");
+
+    // not using a member because object has a non standard layout
+    PyGetSetDef getsets[] = {
+        {(char*) "keyfunc",
+         (getter) get_keyfunc,
+         NULL,
+         keyfunc_doc,
+         NULL},
         {(char*) "_iter_revision",
-         T_ULONG,
-         offsetof(object, iter_revision),
-         READONLY,
-         iter_revision_doc},
+         (getter) get_iter_revision,
+         NULL,
+         iter_revision_doc,
+         NULL},
         {NULL},
     };
 
@@ -593,7 +716,7 @@ namespace sortedmap {
                  "    The initial mapping.\n");
 
     PyTypeObject type = {
-        PyVarObject_HEAD_INIT(&PyType_Type, 0)
+        PyVarObject_HEAD_INIT(&meta::type, 0)
         "sortedmap.sortedmap",                      // tp_name
         sizeof(object),                             // tp_basicsize
         0,                                          // tp_itemsize
@@ -623,8 +746,8 @@ namespace sortedmap {
         (getiterfunc) keyiter::iter,                // tp_iter
         0,                                          // tp_iternext
         methods,                                    // tp_methods
-        members,                                    // tp_members
-        0,                                          // tp_getset
+        0,                                          // tp_members
+        getsets,                                    // tp_getset
         0,                                          // tp_base
         0,                                          // tp_dict
         0,                                          // tp_descr_get
