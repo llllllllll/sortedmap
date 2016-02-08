@@ -17,7 +17,7 @@ differences:
    front or the back. ``dict.popitem`` pops an abitrary item; however
    ``sortedmap`` pops the first or the last item.
 4. Optional ``keyfunc`` for defining the sort order. By default this is the
-   identity function. A different keyfunction can be set at object construction
+   identity function. A different key function can be set at object construction
    time like::
 
      sortedmap[keyfunc](...)
