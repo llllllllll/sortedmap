@@ -19,7 +19,7 @@ differences:
    ``.items()``.
 
 4. ``popitem`` accepts a ``first=True`` argument which says to pop from the
-      front or the back. ``dict.popitem`` pops an abitrary item; however
+    front or the back. ``dict.popitem`` pops an abitrary item; however
    ``sortedmap`` pops the first or the last item.
 
 5. Method names and semantics from Python 3 are picked over Python 2. This means
