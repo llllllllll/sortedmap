@@ -1,4 +1,4 @@
-``sortedmap 0.1``
+``sortedmap 0.2``
 =================
 
 A sorted mapping object.

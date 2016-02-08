@@ -22,7 +22,7 @@ classifiers = [
 
 setup(
     name='sortedmap',
-    version='0.1.0',
+    version='0.2.0',
     description='A sorted mapping object',
     author='Joe Jevnik',
     author_email='joejev@gmail.com',
