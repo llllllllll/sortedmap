@@ -933,10 +933,11 @@ init_sortedmap(void)
     }
 
 #if !COMPILING_IN_PY2
-    if (!(m = PyModule_Create(&_sortedmap_module))) {
+    if (!(m = PyModule_Create(&_sortedmap_module)))
 #else
-    if (!(m = Py_InitModule3(MODULE_NAME, NULL, module_doc))) {
+    if (!(m = Py_InitModule3(MODULE_NAME, NULL, module_doc)))
 #endif  // !COMPILING_IN_PY2
+    {
         return ERROR_RETURN;
     }
 
