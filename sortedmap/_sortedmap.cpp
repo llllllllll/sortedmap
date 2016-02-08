@@ -244,15 +244,27 @@ sortedmap::richcompare(sortedmap::object *self, PyObject *other, int opid) {
     sortedmap::object *asmap = (sortedmap::object*) other;
 
     if (self->map.size() != asmap->map.size()) {
-        if (opid == Py_EQ) {
-            Py_RETURN_FALSE;
-        }
-        else {
-            Py_RETURN_TRUE;
-        }
+        return PyBool_FromLong(opid != Py_EQ);
     }
 
     int status;
+
+    if ((size_t) self->map.key_comp().keyfunc ^
+        (size_t) asmap->map.key_comp().keyfunc) {
+        return PyBool_FromLong(opid != Py_EQ);
+    }
+    else if (self->map.key_comp().keyfunc && asmap->map.key_comp().keyfunc) {
+        status = PyObject_RichCompareBool(self->map.key_comp().keyfunc,
+                                          asmap->map.key_comp().keyfunc,
+                                          opid);
+        if (unlikely(status < 0)) {
+            return NULL;
+        }
+        if (!status) {
+            return PyBool_FromLong(opid != Py_EQ);
+        }
+    }
+
     OwnedRef<PyObject> other_val;
 
     for (const auto &pair : self->map) {
@@ -260,12 +272,7 @@ sortedmap::richcompare(sortedmap::object *self, PyObject *other, int opid) {
             other_val = std::move(asmap->map.at(std::get<0>(pair)));
         }
         catch (std::out_of_range &e) {
-            if (opid == Py_EQ) {
-                Py_RETURN_FALSE;
-            }
-            else {
-                Py_RETURN_TRUE;
-            }
+            return PyBool_FromLong(opid != Py_EQ);
         }
         catch (PythonError &e) {
             return NULL;
@@ -522,16 +529,34 @@ sortedmap::repr(sortedmap::object *self) {
     PyObject *it;
     PyObject *aslist;
     PyObject *ret;
+    PyObject *keyfunc;
 
     if (!(it = itemiter::iter(self))) {
         return NULL;
     }
-    if (!(aslist = PySequence_List(it))) {
-        Py_DECREF(it);
+    aslist = PySequence_List(it);
+    Py_DECREF(it);
+    if (!aslist) {
         return NULL;
     }
-    ret = PyUnicode_FromFormat("%s(%R)", Py_TYPE(self)->tp_name, aslist);
-    Py_DECREF(it);
+    if (self->map.key_comp().keyfunc) {
+        if (!(keyfunc =
+              PyUnicode_FromFormat("[%R]", self->map.key_comp().keyfunc))) {
+            Py_DECREF(aslist);
+            return NULL;
+        }
+    }
+    else {
+        if (!(keyfunc = PyUnicode_FromString(""))) {
+            Py_DECREF(aslist);
+            return NULL;
+        }
+    }
+    ret = PyUnicode_FromFormat("%s%S(%R)",
+                               Py_TYPE(self)->tp_name,
+                               keyfunc,
+                               aslist);
+    Py_DECREF(keyfunc);
     Py_DECREF(aslist);
     return ret;
 }
@@ -552,9 +577,11 @@ sortedmap::copy(sortedmap::object *self) {
 static bool
 merge(sortedmap::object *self, PyObject *other) {
     if (sortedmap::check_exact(other)) {
-        if (!self->map.size()) {
+        sortedmap::object *asmap = (sortedmap::object*) other;
+        if (!self->map.size() &&
+            self->map.key_comp().keyfunc == asmap->map.key_comp().keyfunc) {
             // fast path for copy constructor
-            self->map = ((sortedmap::object*) other)->map;
+            self->map = asmap->map;
             return true;
         }
         try {
