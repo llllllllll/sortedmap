@@ -14,6 +14,10 @@
     return Py_NotImplemented
 #endif  // Py_RETURN_NOTIMPLEMENTED
 
+#ifndef Py_TPFLAGS_CHECKTYPES
+#define Py_TPFLAGS_CHECKTYPES 0  // ignore this in py3
+#endif  / Py_TPFLAGS_CHECKTYPES
+
 #define likely(condition) __builtin_expect(!!(condition), 1)
 #define unlikely(condition) __builtin_expect(!!(condition), 0)
 
@@ -282,6 +286,8 @@ namespace sortedmap {
     }
 
     namespace abstractview {
+        typedef PyObject *strict_func(PyObject*);
+
         struct object {
             PyObject_HEAD
             OwnedRef<sortedmap::object> map;
@@ -302,35 +308,115 @@ namespace sortedmap {
             return (PyObject*) ret;
         }
 
-        template<iterfunc iter, binaryfunc f>
-        PyObject*
-        binop(object *self, PyObject* other) {
-            PyObject *it;
-            PyObject *lhs;
-            PyObject *rhs;
-            PyObject *res;
+        // Specialize binop based on the function and the strict container.
+        // valviews are list like but keyviews and itemviews are set like.
+        // We want to implmenent different operations for these sometimes
+        // but often they are the same. We also want to fail as early as
+        // possible and not put phony functions in the as_number struct that
+        // always raise. This makes it easier to understand which operations
+        // are valid.
+        // The default case pulls the lhs and rhs into the strict container
+        // and returns the result of the operation on those.
+        template<strict_func strict, binaryfunc op, iterfunc iter>
+        struct binop {
+            static inline PyObject *g(object *self, PyObject *other) {
+                PyObject *it;
+                PyObject *lhs;
+                PyObject *rhs;
+                PyObject *res;
 
-            if (!(it = iter(self->map))) {
-                return NULL;
-            }
+                if (!(it = iter(self->map))) {
+                    return NULL;
+                }
 
-            lhs = PySet_New(other);
-            Py_DECREF(it);
-            if (!lhs) {
-                return NULL;
-            }
+                lhs = strict(it);
+                Py_DECREF(it);
+                if (!lhs) {
+                    return NULL;
+                }
 
-            if (!(rhs = PySet_New(other))) {
+                if (!(rhs = strict(other))) {
+                    Py_DECREF(lhs);
+                    return NULL;
+                }
+                res = op(lhs, rhs);
                 Py_DECREF(lhs);
-                return NULL;
+                Py_DECREF(rhs);
+                return res;
             }
-            res = f(lhs, rhs);
-            Py_DECREF(lhs);
-            Py_DECREF(rhs);
-            return res;
-        }
 
+            static PyObject *f(PyObject *self, PyObject *other) {
+                return g((object*) self, other);
+            }
+        };
+
+        // we cannot add sets
         template<iterfunc iter>
+        struct binop<PySet_New, PyNumber_Add, iter> {
+            static constexpr binaryfunc f = NULL;
+        };
+
+        // we cannot multiply sets
+        template<iterfunc iter>
+        struct binop<PySet_New, PyNumber_Multiply, iter> {
+            static constexpr binaryfunc f = NULL;
+        };
+
+        // we can multiply lists; however, we do not pull the rhs into
+        // the strict container because multiply for lists is list repeat
+        template<iterfunc iter>
+        struct binop<PySequence_List, PyNumber_Multiply, iter> {
+            static inline PyObject *g(object *self, PyObject *rhs) {
+                PyObject *it;
+                PyObject *lhs;
+                PyObject *res;
+
+                if (!(it = iter(self->map))) {
+                    return NULL;
+                }
+
+                lhs = PySequence_List(it);
+                Py_DECREF(it);
+                if (!lhs) {
+                    return NULL;
+                }
+
+                res = PyNumber_Multiply(lhs, rhs);
+                Py_DECREF(lhs);
+                Py_DECREF(rhs);
+                return res;
+            }
+
+            static PyObject *f(PyObject *self, PyObject *lhs) {
+                return g((object*) self, lhs);
+            }
+        };
+
+        // we cannot subtract lists
+        template<iterfunc iter>
+        struct binop<PySequence_List, PyNumber_Subtract, iter> {
+            static constexpr binaryfunc f = NULL;
+        };
+
+        // we cannot intersect lists
+        template<iterfunc iter>
+        struct binop<PySequence_List, PyNumber_And, iter> {
+            static constexpr binaryfunc f = NULL;
+        };
+
+        // we cannot symmetric difference lists
+        template<iterfunc iter>
+        struct binop<PySequence_List, PyNumber_Xor, iter> {
+            static constexpr binaryfunc f = NULL;
+        };
+
+        // we cannot union lists
+        template<iterfunc iter>
+        struct binop<PySequence_List, PyNumber_Or, iter> {
+            static constexpr binaryfunc f = NULL;
+        };
+
+        template<strict_func strict, iterfunc iter>
         PyObject*
         richcompare(object *self, PyObject *other, int opid) {
             PyObject *it;
@@ -342,14 +428,14 @@ namespace sortedmap {
                 return NULL;
             }
 
-            lhs = PySet_New(it);
+            lhs = strict(it);
             Py_DECREF(it);
             if (!lhs) {
                 Py_DECREF(lhs);
                 return NULL;
             }
 
-            if (!(rhs = PySet_New(other))) {
+            if (!(rhs = strict(other))) {
                 Py_DECREF(lhs);
                 return NULL;
             }
@@ -359,60 +445,81 @@ namespace sortedmap {
             return res;
         }
 
+        template<strict_func strict, iterfunc iter>
+        int
+        pybool(object *self) {
+            PyObject *it;
+            PyObject *st;
+
+            if (!(it = iter(self->map))) {
+                return -1;
+            }
+            st = strict(it);
+            Py_DECREF(it);
+            if (!st) {
+                return -1;
+            }
+            return PyObject_IsTrue(st);
+        }
+
         template<iterfunc iterf>
         PyObject*
         iter(object *self) {
             return iterf(self->map);
         }
 
-        template<iterfunc iter>
+        template<strict_func strict, iterfunc iter>
         PyNumberMethods as_number = {
-            0,                                              // nb_add
-            (binaryfunc) binop<iter, PyNumber_Add>,         // nb_subtract
-            0,                                              // nb_multiply
-            0,                                              // nb_remainder
-            0,                                              // nb_divmod
-            0,                                              // nb_power
-            0,                                              // nb_negative
-            0,                                              // nb_positive
-            0,                                              // nb_absolute
-            0,                                              // nb_bool
-            0,                                              // nb_invert
-            0,                                              // nb_lshift
-            0,                                              // nb_rshift
-            (binaryfunc) binop<iter, PyNumber_And>,         // nb_and
-            (binaryfunc) binop<iter, PyNumber_Xor>,         // nb_xor
-            (binaryfunc) binop<iter, PyNumber_Or>,          // nb_or
+            binop<strict, PyNumber_Add, iter>::f,       // nb_add
+            binop<strict, PyNumber_Subtract, iter>::f,  // nb_subtract
+            binop<strict, PyNumber_Multiply, iter>::f,  // nb_multiply
+#if COMPILING_IN_PY2
+            0,                                          // nb_divide
+#endif  // COMPILING_IN_PY2
+            0,                                          // nb_remainder
+            0,                                          // nb_divmod
+            0,                                          // nb_power
+            0,                                          // nb_negative
+            0,                                          // nb_positive
+            0,                                          // nb_absolute
+            (inquiry) pybool<strict, iter>,             // nb_bool
+            0,                                          // nb_invert
+            0,                                          // nb_lshift
+            0,                                          // nb_rshift
+            binop<strict, PyNumber_And, iter>::f,       // nb_and
+            binop<strict, PyNumber_Xor, iter>::f,       // nb_xor
+            binop<strict, PyNumber_Or, iter>::f,        // nb_or
         };
 
-        template<const char *&name, iterfunc iterf>
+        template<const char *&name, strict_func strict, iterfunc iterf>
         PyTypeObject type = {
             PyVarObject_HEAD_INIT(&PyType_Type, 0)
-            name,                                           // tp_name
-            sizeof(object),                                 // tp_basicsize
-            0,                                              // tp_itemsize
-            (destructor) dealloc,                           // tp_dealloc
-            0,                                              // tp_print
-            0,                                              // tp_getattr
-            0,                                              // tp_setattr
-            0,                                              // tp_reserved
-            (reprfunc) repr,                                // tp_repr
-            &as_number<iterf>,                              // tp_as_number
-            0,                                              // tp_as_sequence
-            0,                                              // tp_as_mapping
-            0,                                              // tp_hash
-            0,                                              // tp_call
-            (reprfunc) repr,                                // tp_str
-            0,                                              // tp_getattro
-            0,                                              // tp_setattro
-            0,                                              // tp_as_buffer
-            Py_TPFLAGS_DEFAULT,                             // tp_flags
-            0,                                              // tp_doc
-            0,                                              // tp_traverse
-            0,                                              // tp_clear
-            (richcmpfunc) richcompare<iterf>,               // tp_richcompare
-            0,                                              // tp_weaklistoffset
-            (getiterfunc) iter<iterf>                       // tp_iter
+            name,                                       // tp_name
+            sizeof(object),                             // tp_basicsize
+            0,                                          // tp_itemsize
+            (destructor) dealloc,                       // tp_dealloc
+            0,                                          // tp_print
+            0,                                          // tp_getattr
+            0,                                          // tp_setattr
+            0,                                          // tp_reserved
+            (reprfunc) repr,                            // tp_repr
+            &as_number<strict, iterf>,                  // tp_as_number
+            0,                                          // tp_as_sequence
+            0,                                          // tp_as_mapping
+            0,                                          // tp_hash
+            0,                                          // tp_call
+            (reprfunc) repr,                            // tp_str
+            0,                                          // tp_getattro
+            0,                                          // tp_setattro
+            0,                                          // tp_as_buffer
+            Py_TPFLAGS_DEFAULT |
+            Py_TPFLAGS_CHECKTYPES,                      // tp_flags
+            0,                                          // tp_doc
+            0,                                          // tp_traverse
+            0,                                          // tp_clear
+            (richcmpfunc) richcompare<strict, iterf>,   // tp_richcompare
+            0,                                          // tp_weaklistoffset
+            (getiterfunc) iter<iterf>,                  // tp_iter
         };
     }
 
@@ -420,7 +527,9 @@ namespace sortedmap {
         using object = abstractview::object;
         viewfunc view;
         extern const char *name;
-        PyTypeObject type = abstractview::type<name, keyiter::iter>;
+        PyTypeObject type = abstractview::type<name,
+                                               PySet_New,
+                                               keyiter::iter>;
     }
 
     namespace valview {
@@ -428,7 +537,9 @@ namespace sortedmap {
 
         viewfunc view;
         extern const char *name;
-        PyTypeObject type = abstractview::type<name, valiter::iter>;
+        PyTypeObject type = abstractview::type<name,
+                                               PySequence_List,
+                                               valiter::iter>;
     }
 
     namespace itemview {
@@ -436,7 +547,9 @@ namespace sortedmap {
 
         viewfunc view;
         extern const char *name;
-        PyTypeObject type = abstractview::type<name, itemiter::iter>;
+        PyTypeObject type = abstractview::type<name,
+                                               PySet_New,
+                                               itemiter::iter>;
     }
 
     PySequenceMethods as_sequence = {
