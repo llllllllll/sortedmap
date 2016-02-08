@@ -5,6 +5,20 @@ import pytest
 from sortedmap import sortedmap
 
 
+@pytest.fixture
+def m():
+    m = sortedmap()
+    m['a'] = 1
+    m['b'] = 2
+    m['c'] = 3
+    return m
+
+
+@pytest.fixture
+def keyfunc_m():
+    return sortedmap[len](abc=1, bc=2, c=3)
+
+
 def test_from_kwargs():
     assert (
         list(sortedmap(a=1, b=2, c=3).items()) ==
@@ -52,13 +66,11 @@ def test_from_sortedmap():
     assert n != m
 
 
-@pytest.fixture
-def m():
-    m = sortedmap()
-    m['a'] = 1
-    m['b'] = 2
-    m['c'] = 3
-    return m
+def test_from_sortedmap_different_keyfunc():
+    m = sortedmap[len](abc=1, bc=2, c=3)
+    n = sortedmap(m)
+    assert m != n
+    assert list(m.items()) == [('c', 3), ('bc', 2), ('abc', 1)]
 
 
 def test_update_kwargs(m):
@@ -261,3 +273,36 @@ def test_clear(m):
     # check that copy constructor doesn't share the maps
     assert len(n) == 3
     assert n == sortedmap(a=1, b=2, c=3)
+
+
+def test_repr(m, keyfunc_m):
+    assert repr(m) == "sortedmap.sortedmap([('a', 1), ('b', 2), ('c', 3)])"
+    assert repr(keyfunc_m) == (
+        "sortedmap.sortedmap[<built-in function len>]"
+        "([('c', 3), ('bc', 2), ('abc', 1)])"
+    )
+
+
+def test_keyview_repr(m):
+    assert repr(m.keys()) == "sortedmap.keyview(['a', 'b', 'c'])"
+
+
+def test_valview_repr(m):
+    assert repr(m.values()) == 'sortedmap.valview([1, 2, 3])'
+
+
+def test_itemview_repr(m):
+    assert (
+        repr(m.items()) == "sortedmap.itemview([('a', 1), ('b', 2), ('c', 3)])"
+    )
+
+
+def test_keyfunc_partial_repr():
+    assert (
+        repr(sortedmap[len]) == 'sortedmap.sortedmap[<built-in function len>]'
+    )
+
+
+def test_keyfunc(keyfunc_m):
+    assert keyfunc_m.keys() == ['c', 'bc', 'abc']
+    assert dict(keyfunc_m) == {'abc': 1, 'bc': 2, 'c': 3}
