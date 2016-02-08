@@ -243,3 +243,21 @@ def test_setdefault():
 
     assert m.setdefault('b', 1) == 1
     assert m.setdefault('b', 2) == 1
+
+
+def test_fromkeys():
+    keys = 'abc'
+    assert sortedmap.fromkeys(keys) == sortedmap(a=None, b=None, c=None)
+    ob = object()
+    assert sortedmap.fromkeys(keys, ob) == sortedmap(a=ob, b=ob, c=ob)
+
+
+def test_clear(m):
+    n = sortedmap(m)
+    m.clear()
+    assert not len(m)
+    assert m == sortedmap()
+
+    # check that copy constructor doesn't share the maps
+    assert len(n) == 3
+    assert n == sortedmap(a=1, b=2, c=3)
